@@ -1,36 +1,83 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# GINES Atendimento
 
-## Getting Started
+Agente de IA para WhatsApp (imobiliária GINES) + painel de cadastro de imóveis e inbox da equipe.
 
-First, run the development server:
+## O que já está pronto
+
+- Banco Supabase **provisionado e com o schema aplicado** (projeto `gines-atendimento`, região `sa-east-1`).
+- Storage bucket `property-media` criado (upload de vídeo/PDF/fotos por imóvel).
+- Painel admin: login, cadastro/edição de imóvel com upload, inbox com fila de handoff.
+- Núcleo do agente: prompt em camadas, 6 tools (function calling), motor de follow-up (2h → 6h → 48h em loop), detecção de "promessa vazia", lock/dedup/debounce de mensagens.
+- Webhook único da uazapi + endpoints de debug (protegidos, só funcionam com `DEBUG=true`).
+
+## O que falta você me dar pra ele "ficar no ar" de verdade
+
+| Precisa de | Onde conseguir | Onde colocar |
+|---|---|---|
+| `OPENAI_API_KEY` | platform.openai.com → API Keys | `.env.local` / variável de ambiente do deploy |
+| Instância uazapi conectada ao número do GINES (QR code) | seu provedor de uazapi — mesmo processo que você já fez pro Corrêa/MVF | `UAZAPI_BASE_URL` e `UAZAPI_TOKEN` |
+| ID do grupo/número da equipe pra onde o bot avisa handoff ("passar o bastão") | pegue o `chatid` do grupo (mesma lógica do Corrêa) | `NOTIFY_GROUP_ID` |
+| Configurar o webhook da instância uazapi apontando pra `https://SEU-DOMINIO/api/webhooks/uazapi?token=<WEBHOOK_TOKEN>` | painel/API da uazapi | — |
+| Um cron externo (ex: cron-job.org) batendo em `https://SEU-DOMINIO/api/cron?secret=<CRON_SECRET>` a cada 5 min | cron-job.org (grátis) ou similar | — |
+| Onde hospedar (Docker/EasyPanel como os outros projetos, ou outra opção sua) | — | — |
+| Domínio | — | — |
+
+`WEBHOOK_TOKEN`, `CRON_SECRET` e `DEBUG_TOKEN` **já foram gerados** e estão no `.env.local` — não precisa criar, só usar.
+
+### Primeiro usuário do painel (você)
 
 ```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+node --env-file=.env.local scripts/create-user.mjs seu-email@exemplo.com "sua-senha" "Seu Nome" admin
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Pra cada corretor da equipe, repita trocando `admin` por `corretor`.
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+## ⚠️ Risco técnico a validar antes de confiar 100% no fluxo
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+A identificação automática do imóvel pelo anúncio clicado (`referral`/`externalAdReplyInfo` do WhatsApp) **não está confirmada em produção** — nenhum dos seus outros bots usa esse campo, então não sabemos ainda se a uazapi repassa esse dado.
 
-## Learn More
+Como testar: depois que a instância estiver conectada e o webhook configurado, clique num anúncio real (Click to WhatsApp) e mande uma mensagem. Depois confira:
 
-To learn more about Next.js, take a look at the following resources:
+```
+GET /api/debug?token=<DEBUG_TOKEN>&action=ad-referrals
+```
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+(com `DEBUG=true` setado). Se vier algo em `raw` com título/thumbnail do anúncio, o matching por título funciona. Se não vier nada reconhecível, o bot já cai no plano B automaticamente (pergunta qual imóvel interessou, listando os ativos) — só não vai ser automático.
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+## Rodando localmente
 
-## Deploy on Vercel
+```bash
+npm install
+npm run dev
+```
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+Sem `OPENAI_API_KEY`/`UAZAPI_*` configurados, o painel (login, cadastro de imóvel, inbox) funciona normalmente — só a conversa de fato com o WhatsApp depende dessas chaves.
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+## Deploy
+
+Dockerfile já pronto (multi-stage, `output: "standalone"`). Mesmo padrão dos seus outros apps: build → registry (GHCR) → EasyPanel.
+
+```bash
+docker build \
+  --build-arg NEXT_PUBLIC_SUPABASE_URL=$NEXT_PUBLIC_SUPABASE_URL \
+  --build-arg NEXT_PUBLIC_SUPABASE_ANON_KEY=$NEXT_PUBLIC_SUPABASE_ANON_KEY \
+  -t gines-atendimento .
+```
+
+As demais variáveis (`SUPABASE_SERVICE_ROLE_KEY`, `OPENAI_API_KEY`, `UAZAPI_*`, `WEBHOOK_TOKEN`, `CRON_SECRET`, `DEBUG_TOKEN`, `NOTIFY_GROUP_ID`) são só runtime — configura direto no serviço do EasyPanel, não precisa rebuildar a imagem quando trocar.
+
+## Arquitetura (resumo)
+
+- **Next.js 16** (App Router) + TypeScript + Tailwind — painel e API num serviço só.
+- **Supabase** (Postgres + Auth + Storage) — `properties`, `contacts`, `conversations`, `messages`, `ad_referrals`, `app_logs`.
+- **uazapi** — canal WhatsApp, webhook único (`/api/webhooks/uazapi`).
+- **OpenAI** (`gpt-4.1-mini` por padrão, configurável via `OPENAI_MODEL`) — function calling, 6 tools: `buscar_imovel`, `focar_imovel`, `enviar_material`, `registrar_nome`, `transferir_para_humano`, `finalizar_atendimento`.
+- **Motor de follow-up** — cron externo bate em `/api/cron`, avança conversas por `next_followup_at`/`followup_stage` (2h → 6h → 48h em loop), respeitando horário comercial (seg-sáb 8h-20h).
+- **Handoff** — `transferir_para_humano` põe a conversa em `queued` e avisa o grupo da equipe; a IA continua respondendo até um corretor clicar "Assumir" no painel — só aí ela desliga pra aquela conversa.
+
+## Fora do escopo desta v1 (decisão deliberada, pra manter direto)
+
+- Sem busca semântica/RAG — poucos imóveis, busca estruturada resolve.
+- Sem automação de fechadura/senha da visita autoguiada — corretor manda a senha manualmente.
+- Sem pipeline de negociação/ROI (isso é específico de leilão, não se aplica aqui).
+- Sem UI de pareamento de número (QR code) — parear a instância uazapi direto no provedor dela.
