@@ -12,8 +12,15 @@ const LOCK_MS = 2 * 60 * 1000;
 const HISTORY_LIMIT = 30;
 const MODEL = process.env.OPENAI_MODEL || "gpt-4.1-mini";
 
-// bot diz que vai fazer algo sem ter chamado a tool correspondente nesse turno
-const PROMISE_RE = /\b(vou (verificar|confirmar|checar|ver)|já te (passo|chamo|confirmo)|deixa eu (ver|verificar))\b/i;
+// bot diz que vai fazer algo sem ter chamado a tool correspondente nesse turno.
+// Achado em teste real (13/08/26): "já vou registrar" (nome) não era coberto — o modelo
+// pode usar qualquer verbo de ação, não só verificar/confirmar. Lista ampliada de propósito.
+const PROMISE_VERBS =
+  "verificar|confirmar|checar|ver|registrar|anotar|guardar|salvar|marcar|passar|chamar|transferir|avisar|encaminhar|agendar|procurar|buscar|consultar";
+const PROMISE_RE = new RegExp(
+  `\\b(já? ?vou (${PROMISE_VERBS})|já te (passo|chamo|confirmo|encaminho|transfiro)|deixa eu (${PROMISE_VERBS}))\\b`,
+  "i"
+);
 
 function openaiClient() {
   const apiKey = process.env.OPENAI_API_KEY;
