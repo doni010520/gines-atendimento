@@ -30,8 +30,11 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ ok: true }); // payload ilegível — ignora, responde 200
   }
 
+  // a doc da uazapi é inconsistente entre singular/plural ("message" vs "messages") —
+  // aceita as duas formas em vez de apostar numa só.
+  const event = body.event ?? "";
   try {
-    if (body.event === "message") {
+    if (event === "message" || event === "messages") {
       const messages = extractMessages(body.data);
       for (const message of messages) {
         await handleInboundMessage(message).catch((err) =>
@@ -40,12 +43,15 @@ export async function POST(req: NextRequest) {
           })
         );
       }
-    } else if (body.event === "status") {
+    } else if (event === "status" || event === "messages_update") {
       await handleStatusUpdate(body.data).catch((err) =>
         logEvent("error", "webhook", "falha ao processar status", {
           error: err instanceof Error ? err.message : String(err),
         })
       );
+    } else if (event && event !== "connection" && event !== "presence") {
+      // evento não tratado ainda — loga pra sabermos se precisa de suporte (nunca falha o webhook)
+      await logEvent("info", "webhook", "evento não tratado", { event });
     }
   } catch (err) {
     await logEvent("error", "webhook", "erro não tratado no webhook", {
@@ -57,8 +63,13 @@ export async function POST(req: NextRequest) {
 }
 
 async function handleStatusUpdate(data: unknown) {
-  if (!data || typeof data !== "object") return;
-  const d = data as Record<string, unknown>;
+  // pode vir 1 objeto ou uma lista — mesmo normalizador usado pra mensagens
+  for (const d of extractMessages(data)) {
+    await applyStatus(d);
+  }
+}
+
+async function applyStatus(d: Record<string, unknown>) {
   const messageId = typeof d.messageid === "string" ? d.messageid : undefined;
   const status = typeof d.status === "string" ? d.status.toLowerCase() : undefined;
   if (!messageId || !status) return;
