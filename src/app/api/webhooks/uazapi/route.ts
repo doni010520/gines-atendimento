@@ -23,36 +23,15 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ ok: false, error: "unauthorized" }, { status: 401 });
   }
 
-  let body: { event?: string; instance?: string; data?: unknown };
+  let body: Record<string, unknown>;
   try {
     body = await req.json();
   } catch {
     return NextResponse.json({ ok: true }); // payload ilegível — ignora, responde 200
   }
 
-  // a doc da uazapi é inconsistente entre singular/plural ("message" vs "messages") —
-  // aceita as duas formas em vez de apostar numa só.
-  const event = body.event ?? "";
   try {
-    if (event === "message" || event === "messages") {
-      const messages = extractMessages(body.data);
-      for (const message of messages) {
-        await handleInboundMessage(message).catch((err) =>
-          logEvent("error", "webhook", "falha ao processar mensagem", {
-            error: err instanceof Error ? err.message : String(err),
-          })
-        );
-      }
-    } else if (event === "status" || event === "messages_update") {
-      await handleStatusUpdate(body.data).catch((err) =>
-        logEvent("error", "webhook", "falha ao processar status", {
-          error: err instanceof Error ? err.message : String(err),
-        })
-      );
-    } else if (event && event !== "connection" && event !== "presence") {
-      // evento não tratado ainda — loga pra sabermos se precisa de suporte (nunca falha o webhook)
-      await logEvent("info", "webhook", "evento não tratado", { event });
-    }
+    await routeWebhookBody(body);
   } catch (err) {
     await logEvent("error", "webhook", "erro não tratado no webhook", {
       error: err instanceof Error ? err.message : String(err),
@@ -62,10 +41,76 @@ export async function POST(req: NextRequest) {
   return NextResponse.json({ ok: true });
 }
 
-async function handleStatusUpdate(data: unknown) {
-  // pode vir 1 objeto ou uma lista — mesmo normalizador usado pra mensagens
-  for (const d of extractMessages(data)) {
-    await applyStatus(d);
+/**
+ * A uazapi não segue um envelope único e estável entre eventos (documentação real diverge
+ * da observada em produção — "event" às vezes é string discriminadora, às vezes é o próprio
+ * payload do evento). Em vez de apostar num formato, tenta várias formas conhecidas em ordem
+ * e, se nada bater, loga o corpo cru inteiro pra dar pra ajustar rápido sem perder o evento.
+ */
+async function routeWebhookBody(body: Record<string, unknown>) {
+  const eventField = body.event;
+
+  // forma documentada: { event: "messages" | "message", data: {...} }
+  if (eventField === "message" || eventField === "messages") {
+    return processInboundMessages(extractMessages(body.data));
+  }
+  if (eventField === "status" || eventField === "messages_update") {
+    return processStatusUpdates(extractMessages(body.data));
+  }
+  if (eventField === "connection" || eventField === "presence") {
+    return; // sem ação — evento reconhecido, só não precisamos fazer nada com ele
+  }
+
+  // forma observada: "event" é o próprio objeto do payload (recibo/atualização), com um
+  // campo "Type" indicando o que é (ex: "Delivered", "Read").
+  if (eventField && typeof eventField === "object") {
+    const inner = eventField as Record<string, unknown>;
+    const type = typeof inner.Type === "string" ? inner.Type.toLowerCase() : undefined;
+    const messageIds = Array.isArray(inner.MessageIDs) ? inner.MessageIDs : undefined;
+    if (type && messageIds) {
+      return processStatusUpdates(messageIds.map((id) => ({ messageid: String(id), status: type })));
+    }
+    // "event" objeto mas sem o formato de recibo conhecido — pode ser uma mensagem de verdade
+    if (looksLikeMessage(inner)) {
+      return processInboundMessages([inner]);
+    }
+  }
+
+  // fallback: o body inteiro (ou body.data) já é/contém a mensagem, sem wrapper "event" nenhum
+  if (looksLikeMessage(body)) {
+    return processInboundMessages([body]);
+  }
+  const fromData = extractMessages(body.data);
+  if (fromData.length) return processInboundMessages(fromData);
+
+  await logEvent("info", "webhook", "formato de payload não reconhecido", {
+    body: JSON.stringify(body).slice(0, 4000),
+  });
+}
+
+function looksLikeMessage(obj: Record<string, unknown>): boolean {
+  const hasChat = typeof obj.chatid === "string" || typeof obj.Chat === "string";
+  const hasContent = obj.text !== undefined || obj.content !== undefined || typeof obj.messageid === "string";
+  return hasChat && hasContent;
+}
+
+async function processInboundMessages(messages: Record<string, unknown>[]) {
+  for (const message of messages) {
+    await handleInboundMessage(message).catch((err) =>
+      logEvent("error", "webhook", "falha ao processar mensagem", {
+        error: err instanceof Error ? err.message : String(err),
+      })
+    );
+  }
+}
+
+async function processStatusUpdates(items: Record<string, unknown>[]) {
+  for (const item of items) {
+    await applyStatus(item).catch((err) =>
+      logEvent("error", "webhook", "falha ao processar status", {
+        error: err instanceof Error ? err.message : String(err),
+      })
+    );
   }
 }
 
