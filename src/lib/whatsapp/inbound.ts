@@ -3,8 +3,37 @@ import { parseUazapiMessage, type ParsedInboundMessage } from "./parse-webhook";
 import { scheduleDebounced } from "./debounce";
 import { runAgentTurn } from "@/lib/ai/agent";
 import { logEvent } from "@/lib/log";
+import { sendText } from "./uazapi";
 
 const STALE_MS = Number(process.env.BOT_STALE_MS ?? 5 * 60 * 1000);
+
+// comando de teste: a própria pessoa manda "/reset" no WhatsApp e a conversa some,
+// sem precisar entrar no painel. Barra no início pra não confundir com texto normal
+// de um cliente de verdade.
+const RESET_COMMAND_RE = /^\/reset$/i;
+
+/** Apaga contato + conversa + mensagens de um telefone — usado pelo comando /reset. */
+async function resetConversationByPhone(db: ReturnType<typeof createServiceClient>, phone: string) {
+  const { data: contact } = await db.from("contacts").select("id").eq("phone", phone).maybeSingle();
+  if (contact) {
+    const { data: conversation } = await db
+      .from("conversations")
+      .select("id")
+      .eq("contact_id", contact.id)
+      .maybeSingle();
+    if (conversation) {
+      await db.from("messages").delete().eq("conversation_id", conversation.id);
+      await db.from("ad_referrals").delete().eq("conversation_id", conversation.id);
+      await db.from("conversations").delete().eq("id", conversation.id);
+    }
+    await db.from("contacts").delete().eq("id", contact.id);
+  }
+  await sendText(phone, "🔄 Conversa zerada! Pode mandar uma mensagem pra começar do zero.").catch((err) =>
+    logEvent("error", "reset-command", "falha ao confirmar reset", {
+      error: err instanceof Error ? err.message : String(err),
+    })
+  );
+}
 
 async function getOrCreateContact(db: ReturnType<typeof createServiceClient>, phone: string, name?: string) {
   const { data: existing } = await db.from("contacts").select("*").eq("phone", phone).maybeSingle();
@@ -51,6 +80,11 @@ export async function handleInboundMessage(rawMessage: Record<string, unknown>) 
 
   if (parsed.isGroup) return; // grupos não entram no atendimento
   if (!parsed.phone) return;
+
+  if (!parsed.fromMe && RESET_COMMAND_RE.test(parsed.text.trim())) {
+    await resetConversationByPhone(db, parsed.phone);
+    return;
+  }
 
   // mensagem velha reentregue pelo provedor — persiste pra histórico, mas não dispara o bot
   const rawTs = rawMessage.messageTimestamp;
