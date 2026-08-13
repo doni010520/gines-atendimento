@@ -97,9 +97,9 @@ export async function runAgentTurn(conversationId: string) {
       ? await db.from("properties").select("*").eq("id", conversation.property_id).maybeSingle()
       : { data: null };
 
-    const { data: otherProperties } = await db
+    const { data: otherProperties, count: totalActiveProperties } = await db
       .from("properties")
-      .select("id,title,neighborhood,price")
+      .select("id,title,neighborhood,price", { count: "exact" })
       .eq("status", "ativo")
       .neq("id", conversation.property_id ?? "00000000-0000-0000-0000-000000000000")
       .limit(5);
@@ -116,6 +116,7 @@ export async function runAgentTurn(conversationId: string) {
       nameConfirmed: contact.name_confirmed,
       focusedProperty: focusedProperty ?? null,
       otherActiveProperties: otherProperties ?? [],
+      totalActiveProperties: totalActiveProperties ?? (otherProperties?.length ?? 0),
       nowIso: new Date().toISOString(),
     });
 

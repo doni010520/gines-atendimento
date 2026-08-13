@@ -17,16 +17,26 @@ const HANDOFF_RENOTIFY_MS = 10 * 60 * 1000;
 const FOLLOWUP_STAGE1_MS = 2 * 60 * 60 * 1000; // +2h: avaliou? quer visitar?
 
 async function toolBuscarImovel(db: Db, args: Record<string, unknown>) {
-  let q = db.from("properties").select("id,title,type,price,neighborhood,bedrooms,status").eq("status", "ativo");
+  let q = db
+    .from("properties")
+    .select("id,title,type,price,neighborhood,bedrooms,status", { count: "exact" })
+    .eq("status", "ativo");
   if (typeof args.bairro === "string" && args.bairro.trim()) q = q.ilike("neighborhood", `%${args.bairro.trim()}%`);
   if (args.tipo === "venda" || args.tipo === "locacao") q = q.eq("type", args.tipo);
   if (typeof args.preco_max === "number") q = q.lte("price", args.preco_max);
   if (typeof args.preco_min === "number") q = q.gte("price", args.preco_min);
   if (typeof args.quartos_min === "number") q = q.gte("bedrooms", args.quartos_min);
 
-  const { data, error } = await q.limit(8);
+  const { data, error, count } = await q.limit(8);
   if (error) return { ok: false, error: "falha na busca" };
-  return { ok: true, imoveis: data };
+  const total = count ?? data?.length ?? 0;
+  return {
+    ok: true,
+    imoveis: data,
+    total_encontrado: total,
+    // aviso explícito pro modelo não inventar "mais opções" quando já mostrou tudo que existe
+    aviso: total <= (data?.length ?? 0) ? "esta lista é TUDO que bateu com o filtro, não existe mais nada além disso pra oferecer" : `mostrando ${data?.length} de ${total} — há mais resultados, pode refinar o filtro se a pessoa quiser`,
+  };
 }
 
 async function toolFocarImovel(ctx: ToolContext, args: Record<string, unknown>) {

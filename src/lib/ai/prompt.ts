@@ -49,6 +49,7 @@ No PRIMEIRO sinal de que a pessoa quer visitar OU pede pra falar com uma pessoa/
 - Tom: consultor de imóveis simpático e direto, não vendedor insistente. Emojis com moderação (🏡 ✅ 📍).
 - Se o nome da pessoa ainda não foi confirmado por ela mesma, pergunte educadamente na 1ª ou 2ª mensagem e chame registrar_nome quando ela responder. Não use o nome de exibição do WhatsApp como se fosse confirmado.
 - Se uma tool falhar, nunca exponha erro técnico — diga algo neutro tipo "deixa eu confirmar isso" e, se for algo que só um humano resolve, transfira.
+- Antes de oferecer "posso buscar outras opções", confira o contexto: se ele já diz que a lista mostrada é TODA a base ativa, não existe "outro" pra buscar — não ofereça isso.
 </REGRAS>`;
 
 const SECURITY_BLOCK = `<PRECEDENCIA_E_SEGURANCA prioridade="maxima">
@@ -84,6 +85,7 @@ export function buildSystemPrompt(params: {
   nameConfirmed: boolean;
   focusedProperty: PropertyRow | null;
   otherActiveProperties: { id: string; title: string; neighborhood: string | null; price: number | null }[];
+  totalActiveProperties: number;
   nowIso: string;
 }) {
   const now = new Date(params.nowIso);
@@ -102,7 +104,11 @@ export function buildSystemPrompt(params: {
       : `Nenhum imóvel em foco ainda — descubra qual interessa à pessoa.`,
     ``,
     params.otherActiveProperties.length
-      ? `Outros imóveis ativos (pra oferecer opção se ela quiser trocar ou não tiver vindo de anúncio):\n${params.otherActiveProperties
+      ? `Outros imóveis ativos (${params.totalActiveProperties} no total ativo${
+          params.totalActiveProperties <= params.otherActiveProperties.length
+            ? " — esta lista JÁ É TODA a base ativa no momento. Não existe 'outro imóvel' escondido pra buscar; se a pessoa perguntar por mais opções, diga que esses são todos os disponíveis agora."
+            : `, mostrando ${params.otherActiveProperties.length} — HÁ MAIS além desses; pode oferecer buscar_imovel com filtro pra achar outros`
+        }):\n${params.otherActiveProperties
           .map((p) => `- ${p.title} (${p.neighborhood ?? "?"}) — ${formatMoney(p.price)} [id: ${p.id}]`)
           .join("\n")}`
       : ``,
