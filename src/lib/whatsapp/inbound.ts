@@ -3,9 +3,23 @@ import { parseUazapiMessage, type ParsedInboundMessage } from "./parse-webhook";
 import { scheduleDebounced } from "./debounce";
 import { runAgentTurn } from "@/lib/ai/agent";
 import { logEvent } from "@/lib/log";
-import { sendText } from "./uazapi";
+import { sendText, downloadAndTranscribeAudio } from "./uazapi";
 
 const STALE_MS = Number(process.env.BOT_STALE_MS ?? 5 * 60 * 1000);
+
+const AUDIO_MESSAGE_TYPES = new Set(["audiomessage", "ptt", "audio"]);
+
+function isAudioMessage(parsed: ParsedInboundMessage): boolean {
+  if (AUDIO_MESSAGE_TYPES.has(parsed.messageType.toLowerCase())) return true;
+  const raw = parsed.raw as Record<string, unknown> | undefined;
+  const content = raw?.content;
+  if (content && typeof content === "object") {
+    const c = content as Record<string, unknown>;
+    if (c.PTT === true) return true;
+    if (typeof c.mimetype === "string" && c.mimetype.startsWith("audio/")) return true;
+  }
+  return false;
+}
 
 // comando de teste: a própria pessoa manda "/reset" no WhatsApp e a conversa some,
 // sem precisar entrar no painel. Barra no início pra não confundir com texto normal
@@ -99,12 +113,26 @@ export async function handleInboundMessage(rawMessage: Record<string, unknown>) 
     return;
   }
 
+  let body = parsed.text || null;
+  let mediaUrl = parsed.fileUrl ?? null;
+
+  if (!body && parsed.messageId && isAudioMessage(parsed)) {
+    const transcribed = await downloadAndTranscribeAudio(parsed.messageId).catch((err) => {
+      logEvent("error", "inbound", "falha ao transcrever áudio", {
+        error: err instanceof Error ? err.message : String(err),
+      });
+      return { text: null, fileUrl: null };
+    });
+    body = transcribed.text ?? "(áudio recebido, mas não consegui transcrever — peça pra pessoa escrever ou reenviar)";
+    mediaUrl = transcribed.fileUrl ?? mediaUrl;
+  }
+
   const { error: insertError } = await db.from("messages").insert({
     conversation_id: conversation.id,
     direction: "in",
     external_id: parsed.messageId ?? null,
-    body: parsed.text || null,
-    media_url: parsed.fileUrl ?? null,
+    body,
+    media_url: mediaUrl,
     media_type: parsed.messageType,
   });
   if (insertError) {

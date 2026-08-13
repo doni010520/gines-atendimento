@@ -70,3 +70,26 @@ export async function sendPresence(number: string, presence: "composing" | "paus
     // presença é cosmético — nunca deixa isso quebrar o fluxo
   });
 }
+
+/**
+ * Baixa mídia de uma mensagem (a uazapi decripta o arquivo original do WhatsApp) e,
+ * pra áudio, já pede transcrição via Whisper embutido nela mesma — evita a gente ter
+ * que lidar com decriptação de mídia do protocolo do WhatsApp na unha.
+ */
+export async function downloadAndTranscribeAudio(
+  messageId: string
+): Promise<{ text: string | null; fileUrl: string | null }> {
+  const openaiKey = process.env.OPENAI_API_KEY;
+  const result = (await uazRequest("/message/download", {
+    id: messageId,
+    transcribe: true,
+    return_link: true,
+    generate_mp3: true,
+    ...(openaiKey ? { openai_apikey: openaiKey } : {}),
+  })) as { fileURL?: string; transcription?: string };
+
+  return {
+    text: typeof result.transcription === "string" && result.transcription.trim() ? result.transcription.trim() : null,
+    fileUrl: typeof result.fileURL === "string" && result.fileURL ? result.fileURL : null,
+  };
+}
