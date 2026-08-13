@@ -1,6 +1,7 @@
 import { notFound } from "next/navigation";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { assumeConversation, returnToBot, sendMessageFormAction } from "../actions";
+import { ResetButton } from "../ResetButton";
 
 export default async function ConversationPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
@@ -88,6 +89,8 @@ export default async function ConversationPage({ params }: { params: Promise<{ i
             </button>
           </form>
         )}
+
+        <ResetButton conversationId={id} />
       </div>
     </div>
   );

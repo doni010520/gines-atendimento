@@ -69,3 +69,30 @@ export async function sendMessageFormAction(conversationId: string, formData: Fo
   const text = String(formData.get("text") ?? "");
   await sendManualMessage(conversationId, text);
 }
+
+/**
+ * Zera a conversa pra testar do zero: apaga mensagens, a conversa e o contato.
+ * Só uso de teste/admin — numa conversa real isso perde o histórico de verdade.
+ */
+export async function resetConversation(conversationId: string) {
+  const supabase = await createSupabaseServerClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) redirect("/login");
+
+  const { data: conversation } = await supabase
+    .from("conversations")
+    .select("contact_id")
+    .eq("id", conversationId)
+    .single();
+  if (!conversation) throw new Error("conversa não encontrada");
+
+  await supabase.from("messages").delete().eq("conversation_id", conversationId);
+  await supabase.from("ad_referrals").delete().eq("conversation_id", conversationId);
+  await supabase.from("conversations").delete().eq("id", conversationId);
+  await supabase.from("contacts").delete().eq("id", conversation.contact_id);
+
+  revalidatePath("/inbox");
+  redirect("/inbox");
+}
