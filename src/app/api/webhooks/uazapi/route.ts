@@ -48,6 +48,16 @@ export async function POST(req: NextRequest) {
  * e, se nada bater, loga o corpo cru inteiro pra dar pra ajustar rápido sem perder o evento.
  */
 async function routeWebhookBody(body: Record<string, unknown>) {
+  // forma REAL confirmada em produção (13/08/26): discriminador é "EventType" (não "event"),
+  // e a mensagem vem em "message" (objeto único, não lista, não "data").
+  const eventType = body.EventType;
+  if (typeof body.message === "object" && body.message && looksLikeMessage(body.message as Record<string, unknown>)) {
+    if (eventType && eventType !== "messages" && eventType !== "message") {
+      await logEvent("info", "webhook", "EventType inesperado com message presente", { eventType });
+    }
+    return processInboundMessages([body.message as Record<string, unknown>]);
+  }
+
   const eventField = body.event;
 
   // forma documentada: { event: "messages" | "message", data: {...} }
