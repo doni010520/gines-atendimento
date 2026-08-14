@@ -69,6 +69,7 @@ export async function POST(req: NextRequest) {
     contactId: contact.id,
     propertyId: conversation.property_id,
     materialSentAt: conversation.material_sent_at,
+    visitOffered: conversation.visit_offered,
   };
 
   // CUIDADO: enviar_material manda mensagem de WhatsApp de verdade se o número for real.

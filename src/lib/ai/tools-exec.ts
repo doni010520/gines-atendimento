@@ -11,6 +11,7 @@ export type ToolContext = {
   contactId: string;
   propertyId: string | null;
   materialSentAt: string | null;
+  visitOffered: boolean;
 };
 
 const HANDOFF_RENOTIFY_MS = 10 * 60 * 1000;
@@ -118,6 +119,14 @@ async function toolEnviarMaterial(ctx: ToolContext, args: Record<string, unknown
   return { ok: true, enviado, motivo };
 }
 
+async function toolOferecerVisita(ctx: ToolContext) {
+  if (ctx.visitOffered) {
+    return { ok: true, ja_oferecido: true, aviso: "já foi oferecido antes nesta conversa — não repita o convite" };
+  }
+  await ctx.db.from("conversations").update({ visit_offered: true }).eq("id", ctx.conversationId);
+  return { ok: true, ja_oferecido: false };
+}
+
 async function toolRegistrarNome(ctx: ToolContext, args: Record<string, unknown>) {
   const nome = typeof args.nome === "string" ? args.nome.trim() : "";
   if (!nome) return { ok: false, error: "nome vazio" };
@@ -160,6 +169,10 @@ async function toolTransferirParaHumano(ctx: ToolContext, args: Record<string, u
       ).catch((err) =>
         logEvent("error", "handoff", "falha ao notificar grupo", { error: err instanceof Error ? err.message : String(err) })
       );
+    } else {
+      await logEvent("warn", "handoff", "NOTIFY_GROUP_ID não configurado — ninguém foi avisado da transferência", {
+        conversationId: ctx.conversationId,
+      });
     }
     await ctx.db
       .from("conversations")
@@ -193,6 +206,8 @@ export async function executeTool(name: string, args: Record<string, unknown>, c
       return toolFocarImovel(ctx, args);
     case "enviar_material":
       return toolEnviarMaterial(ctx, args);
+    case "oferecer_visita":
+      return toolOferecerVisita(ctx);
     case "registrar_nome":
       return toolRegistrarNome(ctx, args);
     case "transferir_para_humano":

@@ -146,6 +146,7 @@ export type Database = {
           property_id: string | null
           status: Database["public"]["Enums"]["conversation_status"]
           summary: string | null
+          visit_offered: boolean
         }
         Insert: {
           ai_enabled?: boolean
@@ -163,6 +164,7 @@ export type Database = {
           property_id?: string | null
           status?: Database["public"]["Enums"]["conversation_status"]
           summary?: string | null
+          visit_offered?: boolean
         }
         Update: {
           ai_enabled?: boolean
@@ -180,6 +182,7 @@ export type Database = {
           property_id?: string | null
           status?: Database["public"]["Enums"]["conversation_status"]
           summary?: string | null
+          visit_offered?: boolean
         }
         Relationships: [
           {

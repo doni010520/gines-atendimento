@@ -48,6 +48,15 @@ export const TOOLS = [
   {
     type: "function" as const,
     function: {
+      name: "oferecer_visita",
+      description:
+        "Convida a pessoa pra marcar uma visita ao imóvel. Chame isso NO MÁXIMO UMA VEZ por conversa — o contexto injetado diz se já foi oferecido. Se já foi oferecido e a pessoa não pediu de novo, NÃO chame — apenas responda a dúvida dela normalmente. O próximo lembrete de visita é automático (follow-up), não depende de você insistir.",
+      parameters: { type: "object", properties: {} },
+    },
+  },
+  {
+    type: "function" as const,
+    function: {
       name: "registrar_nome",
       description: "Registra o nome real da pessoa quando ELA MESMA informar (não usar nome de exibição do WhatsApp).",
       parameters: {

@@ -117,6 +117,7 @@ export async function runAgentTurn(conversationId: string) {
       focusedProperty: focusedProperty ?? null,
       otherActiveProperties: otherProperties ?? [],
       totalActiveProperties: totalActiveProperties ?? (otherProperties?.length ?? 0),
+      visitOffered: conversation.visit_offered,
       nowIso: new Date().toISOString(),
     });
 
@@ -139,6 +140,7 @@ export async function runAgentTurn(conversationId: string) {
       contactId: contact.id,
       propertyId: conversation.property_id,
       materialSentAt: conversation.material_sent_at,
+      visitOffered: conversation.visit_offered,
     };
 
     let toolWasCalled = false;
@@ -171,6 +173,9 @@ export async function runAgentTurn(conversationId: string) {
           }
           if (toolCall.function.name === "enviar_material") {
             toolCtx.materialSentAt = toolCtx.materialSentAt ?? new Date().toISOString();
+          }
+          if (toolCall.function.name === "oferecer_visita") {
+            toolCtx.visitOffered = true;
           }
         }
         continue;
