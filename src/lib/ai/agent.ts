@@ -97,12 +97,11 @@ export async function runAgentTurn(conversationId: string) {
       ? await db.from("properties").select("*").eq("id", conversation.property_id).maybeSingle()
       : { data: null };
 
-    const { data: otherProperties, count: totalActiveProperties } = await db
+    const { count: totalActiveProperties } = await db
       .from("properties")
-      .select("id,title,neighborhood,price", { count: "exact" })
+      .select("id", { count: "exact", head: true })
       .eq("status", "ativo")
-      .neq("id", conversation.property_id ?? "00000000-0000-0000-0000-000000000000")
-      .limit(5);
+      .neq("id", conversation.property_id ?? "00000000-0000-0000-0000-000000000000");
 
     const { data: history } = await db
       .from("messages")
@@ -115,8 +114,7 @@ export async function runAgentTurn(conversationId: string) {
       contactName: contact.name,
       nameConfirmed: contact.name_confirmed,
       focusedProperty: focusedProperty ?? null,
-      otherActiveProperties: otherProperties ?? [],
-      totalActiveProperties: totalActiveProperties ?? (otherProperties?.length ?? 0),
+      totalActiveProperties: totalActiveProperties ?? 0,
       visitOffered: conversation.visit_offered,
       nowIso: new Date().toISOString(),
     });
