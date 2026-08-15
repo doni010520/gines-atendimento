@@ -136,6 +136,13 @@ async function toolRegistrarNome(ctx: ToolContext, args: Record<string, unknown>
   return { ok: true };
 }
 
+const MOTIVO_LABEL: Record<string, string> = {
+  visita: "Quer marcar visita",
+  duvida_nao_respondida: "Dúvida que a IA não soube responder",
+  pedido_explicito: "Pediu pra falar com alguém",
+  outro: "Outro motivo",
+};
+
 async function toolTransferirParaHumano(ctx: ToolContext, args: Record<string, unknown>) {
   const motivo = typeof args.motivo === "string" ? args.motivo : "outro";
   const resumo = typeof args.resumo === "string" ? args.resumo : "";
@@ -165,10 +172,22 @@ async function toolTransferirParaHumano(ctx: ToolContext, args: Record<string, u
     const groupId = process.env.NOTIFY_GROUP_ID;
     if (groupId) {
       const { data: contact } = await ctx.db.from("contacts").select("phone,name").eq("id", ctx.contactId).single();
-      await sendText(
-        groupId,
-        `📥 *Novo atendimento pra assumir*\nMotivo: ${motivo}\n${resumo}\nContato: ${contact?.name ?? "sem nome"} — ${contact?.phone}\n\nAssuma pelo painel.`
-      ).catch((err) =>
+      const { data: property } = ctx.propertyId
+        ? await ctx.db.from("properties").select("title,address,neighborhood,city").eq("id", ctx.propertyId).maybeSingle()
+        : { data: null };
+
+      const linhas = [
+        `📥 *${MOTIVO_LABEL[motivo] ?? motivo}*`,
+        `Cliente: ${contact?.name ?? "sem nome"} — ${contact?.phone}`,
+        property
+          ? `Imóvel: ${property.title} — ${[property.address, property.neighborhood, property.city].filter(Boolean).join(", ")}`
+          : `Imóvel: não identificado ainda`,
+        resumo ? `Contexto: ${resumo}` : "",
+        ``,
+        `Assuma pelo painel.`,
+      ].filter(Boolean);
+
+      await sendText(groupId, linhas.join("\n")).catch((err) =>
         logEvent("error", "handoff", "falha ao notificar grupo", { error: err instanceof Error ? err.message : String(err) })
       );
     } else {
