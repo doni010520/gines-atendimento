@@ -16,10 +16,40 @@ export default async function InboxPage() {
     .order("last_message_at", { ascending: false })
     .limit(100);
 
+  const list = conversations ?? [];
+
   return (
     <div className="space-y-4">
       <h1 className="text-xl font-semibold">Inbox</h1>
-      <div className="overflow-hidden rounded-xl border bg-white">
+
+      {/* Mobile: lista de cards, cada um totalmente clicável */}
+      <div className="space-y-2 md:hidden">
+        {list.map((c) => {
+          const status = STATUS_LABEL[c.status] ?? STATUS_LABEL.bot;
+          return (
+            <Link
+              key={c.id}
+              href={`/inbox/${c.id}`}
+              className="flex min-h-16 flex-col justify-center rounded-xl border bg-white px-4 py-3"
+            >
+              <div className="flex items-center justify-between gap-2">
+                <span className="font-medium">{c.contact?.name ?? c.contact?.phone ?? "—"}</span>
+                <span className={`shrink-0 rounded-full px-2 py-1 text-xs ${status.className}`}>{status.label}</span>
+              </div>
+              <div className="mt-1 flex items-center justify-between text-xs text-neutral-500">
+                <span>{c.property?.title ?? c.contact?.phone ?? "—"}</span>
+                <span>{c.last_message_at ? new Date(c.last_message_at).toLocaleString("pt-BR") : "—"}</span>
+              </div>
+            </Link>
+          );
+        })}
+        {list.length === 0 && (
+          <p className="rounded-xl border bg-white px-4 py-8 text-center text-neutral-400">Nenhuma conversa ainda.</p>
+        )}
+      </div>
+
+      {/* Desktop: tabela */}
+      <div className="hidden overflow-hidden rounded-xl border bg-white md:block">
         <table className="w-full text-sm">
           <thead className="bg-neutral-50 text-left text-neutral-500">
             <tr>
@@ -30,7 +60,7 @@ export default async function InboxPage() {
             </tr>
           </thead>
           <tbody>
-            {(conversations ?? []).map((c) => {
+            {list.map((c) => {
               const status = STATUS_LABEL[c.status] ?? STATUS_LABEL.bot;
               return (
                 <tr key={c.id} className="border-t hover:bg-neutral-50">
@@ -50,7 +80,7 @@ export default async function InboxPage() {
                 </tr>
               );
             })}
-            {(conversations ?? []).length === 0 && (
+            {list.length === 0 && (
               <tr>
                 <td colSpan={4} className="px-4 py-8 text-center text-neutral-400">
                   Nenhuma conversa ainda.

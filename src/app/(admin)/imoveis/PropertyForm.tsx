@@ -1,4 +1,5 @@
 import { saveProperty } from "./actions";
+import { FormSubmitButton } from "../FormSubmitButton";
 import type { Database } from "@/lib/supabase/database.types";
 
 type Property = Database["public"]["Tables"]["properties"]["Row"];
@@ -8,8 +9,14 @@ export function PropertyForm({ property }: { property?: Property }) {
     <form action={saveProperty} className="space-y-6 rounded-xl border bg-white p-6">
       {property && <input type="hidden" name="id" value={property.id} />}
 
-      <div className="grid grid-cols-2 gap-4">
-        <Field label="Título do anúncio" name="title" defaultValue={property?.title} required className="col-span-2" />
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+        <Field
+          label="Título do anúncio"
+          name="title"
+          defaultValue={property?.title}
+          required
+          className="sm:col-span-2"
+        />
         <Field
           label="Tipo de imóvel (casa, apartamento, sobrado...)"
           name="kind"
@@ -27,7 +34,12 @@ export function PropertyForm({ property }: { property?: Property }) {
         <Field label="IPTU (R$)" name="iptu" type="number" defaultValue={property?.iptu ?? undefined} />
         <Field label="Cidade" name="city" defaultValue={property?.city ?? "São Paulo"} />
         <Field label="Bairro" name="neighborhood" defaultValue={property?.neighborhood ?? undefined} />
-        <Field label="Endereço" name="address" defaultValue={property?.address ?? undefined} className="col-span-2" />
+        <Field
+          label="Endereço"
+          name="address"
+          defaultValue={property?.address ?? undefined}
+          className="sm:col-span-2"
+        />
         <Field label="Quartos" name="bedrooms" type="number" defaultValue={property?.bedrooms ?? undefined} />
         <Field label="Suítes" name="suites" type="number" defaultValue={property?.suites ?? undefined} />
         <Field label="Vagas" name="parking_spots" type="number" defaultValue={property?.parking_spots ?? undefined} />
@@ -37,7 +49,7 @@ export function PropertyForm({ property }: { property?: Property }) {
           label="Características (separadas por vírgula)"
           name="features"
           defaultValue={property?.features?.join(", ")}
-          className="col-span-2"
+          className="sm:col-span-2"
         />
       </div>
 
@@ -65,15 +77,24 @@ export function PropertyForm({ property }: { property?: Property }) {
         />
       </div>
 
-      <div className="grid grid-cols-3 gap-4">
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
         <FileField label="Vídeo do criativo (.mp4)" name="video" accept="video/*" current={property?.video_url} />
         <FileField label="PDF (fotos + reforma)" name="pdf" accept="application/pdf" current={property?.pdf_url} />
-        <FileField label="Fotos (várias)" name="fotos" accept="image/*" multiple current={property?.photo_urls?.length ? `${property.photo_urls.length} foto(s)` : undefined} />
+        <FileField
+          label="Fotos (várias)"
+          name="fotos"
+          accept="image/*"
+          multiple
+          current={property?.photo_urls?.length ? `${property.photo_urls.length} foto(s)` : undefined}
+        />
       </div>
 
-      <button type="submit" className="rounded bg-neutral-900 px-4 py-2 text-sm font-medium text-white">
+      <FormSubmitButton
+        pendingLabel="Enviando (pode demorar com vídeo grande)..."
+        className="min-h-11 w-full rounded bg-neutral-900 px-4 text-sm font-medium text-white sm:w-auto"
+      >
         {property ? "Salvar alterações" : "Cadastrar imóvel"}
-      </button>
+      </FormSubmitButton>
     </form>
   );
 }
@@ -102,7 +123,7 @@ function Field({
         step={type === "number" ? "any" : undefined}
         defaultValue={defaultValue ?? undefined}
         required={required}
-        className="w-full rounded border px-3 py-2 text-sm"
+        className="min-h-11 w-full rounded border px-3 text-sm"
       />
     </div>
   );
@@ -122,7 +143,7 @@ function Select({
   return (
     <div className="space-y-1">
       <label className="text-sm font-medium">{label}</label>
-      <select name={name} defaultValue={defaultValue} className="w-full rounded border px-3 py-2 text-sm">
+      <select name={name} defaultValue={defaultValue} className="min-h-11 w-full rounded border px-3 text-sm">
         {options.map((o) => (
           <option key={o} value={o}>
             {o}

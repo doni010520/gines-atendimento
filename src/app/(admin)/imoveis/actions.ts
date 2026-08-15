@@ -3,6 +3,7 @@
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
+import { logEvent } from "@/lib/log";
 import type { Database } from "@/lib/supabase/database.types";
 
 type PropertyStatus = Database["public"]["Enums"]["property_status"];
@@ -62,16 +63,29 @@ export async function saveProperty(formData: FormData) {
   const propertyId = id || crypto.randomUUID();
   const basePath = `${propertyId}/${slug(title)}`;
 
-  const [videoUrl, pdfUrl] = await Promise.all([
-    uploadIfPresent(supabase, formData.get("video") as File | null, `${basePath}-video`),
-    uploadIfPresent(supabase, formData.get("pdf") as File | null, `${basePath}-pdf`),
-  ]);
-
-  const fotos = formData.getAll("fotos").filter((f): f is File => f instanceof File && f.size > 0);
+  let videoUrl: string | null;
+  let pdfUrl: string | null;
   const photoUrls: string[] = [];
-  for (let i = 0; i < fotos.length; i++) {
-    const url = await uploadIfPresent(supabase, fotos[i], `${basePath}-foto-${i + 1}`);
-    if (url) photoUrls.push(url);
+  try {
+    [videoUrl, pdfUrl] = await Promise.all([
+      uploadIfPresent(supabase, formData.get("video") as File | null, `${basePath}-video`),
+      uploadIfPresent(supabase, formData.get("pdf") as File | null, `${basePath}-pdf`),
+    ]);
+
+    const fotos = formData.getAll("fotos").filter((f): f is File => f instanceof File && f.size > 0);
+    for (let i = 0; i < fotos.length; i++) {
+      const url = await uploadIfPresent(supabase, fotos[i], `${basePath}-foto-${i + 1}`);
+      if (url) photoUrls.push(url);
+    }
+  } catch (err) {
+    await logEvent("error", "imovel-upload", "falha ao subir mídia do imóvel", {
+      propertyId,
+      title,
+      error: err instanceof Error ? err.message : String(err),
+    });
+    throw new Error(
+      "Não consegui subir um dos arquivos (vídeo/PDF/foto) — pode ser conexão instável ou arquivo grande demais. Tenta de novo, ou manda um arquivo menor."
+    );
   }
 
   const features = String(formData.get("features") ?? "")
@@ -110,14 +124,16 @@ export async function saveProperty(formData: FormData) {
     ...(photoUrls.length ? { photo_urls: photoUrls } : {}),
   };
 
-  if (id) {
-    const { error } = await supabase.from("properties").update(payload).eq("id", id);
-    if (error) throw new Error(error.message);
-  } else {
-    const { error } = await supabase
-      .from("properties")
-      .insert({ id: propertyId, ...payload, created_by: user.id });
-    if (error) throw new Error(error.message);
+  const { error: dbError } = id
+    ? await supabase.from("properties").update(payload).eq("id", id)
+    : await supabase.from("properties").insert({ id: propertyId, ...payload, created_by: user.id });
+  if (dbError) {
+    await logEvent("error", "imovel-upload", "falha ao salvar imóvel no banco", {
+      propertyId,
+      title,
+      error: dbError.message,
+    });
+    throw new Error("Não consegui salvar o imóvel — tenta de novo.");
   }
 
   revalidatePath("/imoveis");
