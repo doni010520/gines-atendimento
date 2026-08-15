@@ -10,7 +10,12 @@ export function PropertyForm({ property }: { property?: Property }) {
 
       <div className="grid grid-cols-2 gap-4">
         <Field label="Título do anúncio" name="title" defaultValue={property?.title} required className="col-span-2" />
-        <Select label="Tipo" name="type" defaultValue={property?.type ?? "venda"} options={["venda", "locacao"]} />
+        <Field
+          label="Tipo de imóvel (casa, apartamento, sobrado...)"
+          name="kind"
+          defaultValue={property?.kind ?? undefined}
+        />
+        <Select label="Modalidade" name="type" defaultValue={property?.type ?? "venda"} options={["venda", "locacao"]} />
         <Select
           label="Status"
           name="status"

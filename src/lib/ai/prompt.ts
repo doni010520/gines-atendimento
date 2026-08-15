@@ -2,6 +2,7 @@ type PropertyRow = {
   id: string;
   title: string;
   type: string;
+  kind: string | null;
   status: string;
   price: number | null;
   condo_fee: number | null;
@@ -69,7 +70,7 @@ function formatMoney(v: number | null) {
 function formatProperty(p: PropertyRow): string {
   return [
     `Título: ${p.title}`,
-    `Tipo: ${p.type} | Status: ${p.status}`,
+    `Tipo de imóvel: ${p.kind ?? "não informado"} | Modalidade: ${p.type} | Status: ${p.status}`,
     `Preço: ${formatMoney(p.price)}${p.condo_fee ? ` | Condomínio: ${formatMoney(p.condo_fee)}` : ""}${p.iptu ? ` | IPTU: ${formatMoney(p.iptu)}` : ""}`,
     `Endereço: ${[p.address, p.neighborhood, p.city].filter(Boolean).join(", ") || "não informado"}`,
     `Quartos: ${p.bedrooms ?? "?"} | Suítes: ${p.suites ?? "?"} | Vagas: ${p.parking_spots ?? "?"}`,

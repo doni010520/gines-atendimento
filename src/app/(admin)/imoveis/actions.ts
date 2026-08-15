@@ -86,6 +86,7 @@ export async function saveProperty(formData: FormData) {
 
   const payload = {
     title,
+    kind: (formData.get("kind") as string)?.trim() || null,
     type: ((formData.get("type") as string) === "locacao" ? "locacao" : "venda") as PropertyType,
     status: (VALID_STATUSES.includes(formData.get("status") as PropertyStatus)
       ? (formData.get("status") as PropertyStatus)

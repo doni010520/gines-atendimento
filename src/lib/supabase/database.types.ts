@@ -303,6 +303,7 @@ export type Database = {
           features: string[]
           id: string
           iptu: number | null
+          kind: string | null
           neighborhood: string | null
           parking_spots: number | null
           pdf_url: string | null
@@ -330,6 +331,7 @@ export type Database = {
           features?: string[]
           id?: string
           iptu?: number | null
+          kind?: string | null
           neighborhood?: string | null
           parking_spots?: number | null
           pdf_url?: string | null
@@ -357,6 +359,7 @@ export type Database = {
           features?: string[]
           id?: string
           iptu?: number | null
+          kind?: string | null
           neighborhood?: string | null
           parking_spots?: number | null
           pdf_url?: string | null

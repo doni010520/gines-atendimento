@@ -20,9 +20,11 @@ const FOLLOWUP_STAGE1_MS = 2 * 60 * 60 * 1000; // +2h: avaliou? quer visitar?
 async function toolBuscarImovel(db: Db, args: Record<string, unknown>) {
   let q = db
     .from("properties")
-    .select("id,title,type,price,neighborhood,bedrooms,status", { count: "exact" })
+    .select("id,title,type,kind,price,city,neighborhood,bedrooms,status", { count: "exact" })
     .eq("status", "ativo");
+  if (typeof args.cidade === "string" && args.cidade.trim()) q = q.ilike("city", `%${args.cidade.trim()}%`);
   if (typeof args.bairro === "string" && args.bairro.trim()) q = q.ilike("neighborhood", `%${args.bairro.trim()}%`);
+  if (typeof args.tipo_imovel === "string" && args.tipo_imovel.trim()) q = q.ilike("kind", `%${args.tipo_imovel.trim()}%`);
   if (args.tipo === "venda" || args.tipo === "locacao") q = q.eq("type", args.tipo);
   if (typeof args.preco_max === "number") q = q.lte("price", args.preco_max);
   if (typeof args.preco_min === "number") q = q.gte("price", args.preco_min);

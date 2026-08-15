@@ -4,12 +4,17 @@ export const TOOLS = [
     function: {
       name: "buscar_imovel",
       description:
-        "Busca imóveis ativos por filtro estruturado (bairro, tipo, faixa de preço, quartos). Use quando a pessoa não veio de um anúncio identificado ou quer ver outras opções. NUNCA invente resultado — sempre chame isso antes de listar imóveis que não estão no contexto já injetado.",
+        "Busca imóveis ativos por filtro estruturado. Use quando a pessoa não veio de um anúncio identificado ou quer ver outras opções. Preencha SÓ os campos que a pessoa realmente mencionou — não invente cidade/bairro/tipo que ela não disse. NUNCA invente resultado — sempre chame isso antes de listar imóveis que não estão no contexto já injetado.",
       parameters: {
         type: "object",
         properties: {
-          bairro: { type: "string", description: "Bairro ou região, se a pessoa mencionou" },
-          tipo: { type: "string", enum: ["venda", "locacao"] },
+          cidade: { type: "string", description: "Cidade, se a pessoa mencionou (ex: São Paulo)" },
+          bairro: { type: "string", description: "Bairro ou região específica, se a pessoa mencionou (ex: Vila Madalena) — NÃO coloque a cidade aqui" },
+          tipo_imovel: {
+            type: "string",
+            description: "Tipo físico do imóvel, se a pessoa mencionou (ex: casa, apartamento, sobrado, cobertura, terreno) — não confundir com venda/locação",
+          },
+          tipo: { type: "string", enum: ["venda", "locacao"], description: "Modalidade: venda ou locação — só se a pessoa deixou claro" },
           preco_max: { type: "number" },
           preco_min: { type: "number" },
           quartos_min: { type: "integer" },

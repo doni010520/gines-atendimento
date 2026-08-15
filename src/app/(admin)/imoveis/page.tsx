@@ -6,7 +6,7 @@ export default async function ImoveisPage() {
   const supabase = await createSupabaseServerClient();
   const { data: properties } = await supabase
     .from("properties")
-    .select("id,title,type,status,price,neighborhood,video_url,pdf_url,photo_urls")
+    .select("id,title,kind,type,status,price,neighborhood,video_url,pdf_url,photo_urls")
     .order("created_at", { ascending: false });
 
   return (
@@ -23,6 +23,7 @@ export default async function ImoveisPage() {
           <thead className="bg-neutral-50 text-left text-neutral-500">
             <tr>
               <th className="px-4 py-2">Título</th>
+              <th className="px-4 py-2">Tipo</th>
               <th className="px-4 py-2">Bairro</th>
               <th className="px-4 py-2">Preço</th>
               <th className="px-4 py-2">Materiais</th>
@@ -34,6 +35,7 @@ export default async function ImoveisPage() {
             {(properties ?? []).map((p) => (
               <tr key={p.id} className="border-t">
                 <td className="px-4 py-2 font-medium">{p.title}</td>
+                <td className="px-4 py-2 text-neutral-500">{p.kind ?? "—"}</td>
                 <td className="px-4 py-2">{p.neighborhood ?? "—"}</td>
                 <td className="px-4 py-2">
                   {p.price ? p.price.toLocaleString("pt-BR", { style: "currency", currency: "BRL" }) : "—"}
@@ -55,7 +57,7 @@ export default async function ImoveisPage() {
             ))}
             {(properties ?? []).length === 0 && (
               <tr>
-                <td colSpan={6} className="px-4 py-8 text-center text-neutral-400">
+                <td colSpan={7} className="px-4 py-8 text-center text-neutral-400">
                   Nenhum imóvel cadastrado ainda.
                 </td>
               </tr>
