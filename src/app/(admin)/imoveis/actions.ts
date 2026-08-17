@@ -98,9 +98,15 @@ export async function saveProperty(formData: FormData) {
     .map((f) => f.trim())
     .filter(Boolean);
 
+  const kindSynonyms = String(formData.get("kind_synonyms") ?? "")
+    .split(",")
+    .map((f) => f.trim().toLowerCase())
+    .filter(Boolean);
+
   const payload = {
     title,
     kind: (formData.get("kind") as string)?.trim() || null,
+    kind_synonyms: kindSynonyms,
     type: ((formData.get("type") as string) === "locacao" ? "locacao" : "venda") as PropertyType,
     status: (VALID_STATUSES.includes(formData.get("status") as PropertyStatus)
       ? (formData.get("status") as PropertyStatus)

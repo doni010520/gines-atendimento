@@ -22,6 +22,12 @@ export function PropertyForm({ property }: { property?: Property }) {
           name="kind"
           defaultValue={property?.kind ?? undefined}
         />
+        <Field
+          label="Sinônimos que o cliente pode usar (separados por vírgula: studio, kitnet, apê...)"
+          name="kind_synonyms"
+          defaultValue={property?.kind_synonyms?.join(", ")}
+          className="sm:col-span-2"
+        />
         <Select label="Modalidade" name="type" defaultValue={property?.type ?? "venda"} options={["venda", "locacao"]} />
         <Select
           label="Status"

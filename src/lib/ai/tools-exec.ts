@@ -20,11 +20,17 @@ const FOLLOWUP_STAGE1_MS = 2 * 60 * 60 * 1000; // +2h: avaliou? quer visitar?
 async function toolBuscarImovel(db: Db, args: Record<string, unknown>) {
   let q = db
     .from("properties")
-    .select("id,title,type,kind,price,city,neighborhood,bedrooms,status", { count: "exact" })
+    .select("id,title,type,kind,kind_synonyms,price,city,neighborhood,bedrooms,status", { count: "exact" })
     .eq("status", "ativo");
   if (typeof args.cidade === "string" && args.cidade.trim()) q = q.ilike("city", `%${args.cidade.trim()}%`);
   if (typeof args.bairro === "string" && args.bairro.trim()) q = q.ilike("neighborhood", `%${args.bairro.trim()}%`);
-  if (typeof args.tipo_imovel === "string" && args.tipo_imovel.trim()) q = q.ilike("kind", `%${args.tipo_imovel.trim()}%`);
+  if (typeof args.tipo_imovel === "string" && args.tipo_imovel.trim()) {
+    // "tipo" tem vocabulário variado (studio/kitnet/apê = apartamento) — bate no kind OU
+    // nos sinônimos cadastrados, nunca só no valor exato (achado real: "studio" não batia
+    // com kind="apartamento" e o bot dizia "não temos" pra um imóvel que existia)
+    const termo = args.tipo_imovel.trim().toLowerCase().replace(/[,{}]/g, "");
+    q = q.or(`kind.ilike.%${termo}%,kind_synonyms.cs.{${termo}}`);
+  }
   if (args.tipo === "venda" || args.tipo === "locacao") q = q.eq("type", args.tipo);
   if (typeof args.preco_max === "number") q = q.lte("price", args.preco_max);
   if (typeof args.preco_min === "number") q = q.gte("price", args.preco_min);
@@ -33,10 +39,15 @@ async function toolBuscarImovel(db: Db, args: Record<string, unknown>) {
   const { data, error, count } = await q.limit(8);
   if (error) return { ok: false, error: "falha na busca" };
   const total = count ?? data?.length ?? 0;
+  // preço NUNCA vem nessa listagem — força o modelo a não citar preço solto ao apresentar
+  // várias opções (achado real: bot listava com preço mesmo sendo instruído a não fazer isso
+  // só no prompt). Preço só aparece via focar_imovel + enviar_material, já com todo o contexto.
+  const imoveis = (data ?? []).map(({ price: _price, ...rest }) => rest);
   return {
     ok: true,
-    imoveis: data,
+    imoveis,
     total_encontrado: total,
+    aviso_preco: "Preço PROPOSITALMENTE não veio nesses resultados — não invente nem estime. Só mencione preço depois de focar num imóvel e mandar o material completo dele.",
     // aviso explícito pro modelo não inventar "mais opções" quando já mostrou tudo que existe
     aviso: total <= (data?.length ?? 0) ? "esta lista é TUDO que bateu com o filtro, não existe mais nada além disso pra oferecer" : `mostrando ${data?.length} de ${total} — há mais resultados, pode refinar o filtro se a pessoa quiser`,
   };
