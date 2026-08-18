@@ -1,5 +1,13 @@
 @import "tailwindcss";
 
+/*
+ * Painel construído só no tema claro (fundo branco, texto escuro explícito nos
+ * componentes) — sem suporte a dark mode ainda. Removido de propósito o
+ * @media (prefers-color-scheme: dark) padrão do create-next-app: ele trocava a cor
+ * do texto do body pra quase-branco no modo escuro do sistema, e como nem todo
+ * elemento define cor própria (herda do body), ficava texto quase-branco em cima
+ * de fundo branco — ilegível. Fixo em claro até termos dark mode de verdade.
+ */
 :root {
   --background: #ffffff;
   --foreground: #171717;
@@ -10,13 +18,6 @@
   --color-foreground: var(--foreground);
   --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);
-}
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
 }
 
 body {
