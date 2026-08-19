@@ -64,9 +64,12 @@ async function toolFocarImovel(ctx: ToolContext, args: Record<string, unknown>) 
   return { ok: true };
 }
 
-async function toolEnviarMaterial(ctx: ToolContext, args: Record<string, unknown>) {
-  const tipo = args.tipo;
-  if (tipo !== "copy" && tipo !== "video" && tipo !== "pdf") return { ok: false, error: "tipo inválido" };
+/**
+ * Manda o bloco inteiro (copy + vídeo + PDF) numa chamada só — não depende do modelo
+ * lembrar de chamar a tool 3 vezes. Achado real (19/08/26): o modelo mandava só a copy
+ * e afirmava "já te enviei todos os detalhes", pulando vídeo/PDF de verdade.
+ */
+async function toolEnviarMaterial(ctx: ToolContext) {
   if (!ctx.propertyId) return { ok: false, error: "nenhum imóvel em foco ainda — chame focar_imovel primeiro" };
 
   const { data: property } = await ctx.db
@@ -76,60 +79,75 @@ async function toolEnviarMaterial(ctx: ToolContext, args: Record<string, unknown
     .maybeSingle();
   if (!property) return { ok: false, error: "imóvel não encontrado" };
 
-  let enviado = false;
-  let motivo: string | undefined;
+  const resultado = { enviado_copy: false, enviado_video: false, enviado_pdf: false, motivo_video: "", motivo_pdf: "" };
 
   try {
-    if (tipo === "copy") {
-      await sendText(ctx.phone, property.copy);
-      enviado = true;
-    } else if (tipo === "video") {
-      if (!property.video_url) {
-        motivo = "sem vídeo cadastrado pra esse imóvel";
-      } else {
-        await sendMedia({ number: ctx.phone, type: "video", file: property.video_url, text: property.title });
-        enviado = true;
-      }
-    } else if (tipo === "pdf") {
-      if (!property.pdf_url) {
-        motivo = "sem PDF cadastrado pra esse imóvel";
-      } else {
-        await sendMedia({
-          number: ctx.phone,
-          type: "document",
-          file: property.pdf_url,
-          docName: `${property.title}.pdf`,
-        });
-        enviado = true;
-      }
-    }
-  } catch (err) {
-    await logEvent("error", "enviar_material", "falha ao enviar mídia", {
-      conversationId: ctx.conversationId,
-      tipo,
-      error: err instanceof Error ? err.message : String(err),
-    });
-    return { ok: false, enviado: false, error: "falha técnica ao enviar" };
-  }
-
-  if (enviado) {
+    await sendText(ctx.phone, property.copy);
+    resultado.enviado_copy = true;
     await ctx.db.from("messages").insert({
       conversation_id: ctx.conversationId,
       direction: "out",
-      body: tipo === "copy" ? property.copy : `[material enviado: ${tipo}]`,
+      body: property.copy,
       is_internal: false,
     });
+  } catch (err) {
+    await logEvent("error", "enviar_material", "falha ao enviar copy", {
+      conversationId: ctx.conversationId,
+      error: err instanceof Error ? err.message : String(err),
+    });
+  }
 
-    if (!ctx.materialSentAt) {
-      const nextFollowup = new Date(Date.now() + FOLLOWUP_STAGE1_MS).toISOString();
-      await ctx.db
-        .from("conversations")
-        .update({ material_sent_at: new Date().toISOString(), followup_stage: 1, next_followup_at: nextFollowup })
-        .eq("id", ctx.conversationId);
+  if (!property.video_url) {
+    resultado.motivo_video = "sem vídeo cadastrado pra esse imóvel";
+  } else {
+    try {
+      await sendMedia({ number: ctx.phone, type: "video", file: property.video_url, text: property.title });
+      resultado.enviado_video = true;
+      await ctx.db.from("messages").insert({
+        conversation_id: ctx.conversationId,
+        direction: "out",
+        body: "[vídeo do imóvel enviado]",
+        is_internal: false,
+      });
+    } catch (err) {
+      resultado.motivo_video = "falha técnica ao enviar";
+      await logEvent("error", "enviar_material", "falha ao enviar vídeo", {
+        conversationId: ctx.conversationId,
+        error: err instanceof Error ? err.message : String(err),
+      });
     }
   }
 
-  return { ok: true, enviado, motivo };
+  if (!property.pdf_url) {
+    resultado.motivo_pdf = "sem PDF cadastrado pra esse imóvel";
+  } else {
+    try {
+      await sendMedia({ number: ctx.phone, type: "document", file: property.pdf_url, docName: `${property.title}.pdf` });
+      resultado.enviado_pdf = true;
+      await ctx.db.from("messages").insert({
+        conversation_id: ctx.conversationId,
+        direction: "out",
+        body: "[PDF do imóvel enviado]",
+        is_internal: false,
+      });
+    } catch (err) {
+      resultado.motivo_pdf = "falha técnica ao enviar";
+      await logEvent("error", "enviar_material", "falha ao enviar PDF", {
+        conversationId: ctx.conversationId,
+        error: err instanceof Error ? err.message : String(err),
+      });
+    }
+  }
+
+  if (!ctx.materialSentAt && (resultado.enviado_copy || resultado.enviado_video || resultado.enviado_pdf)) {
+    const nextFollowup = new Date(Date.now() + FOLLOWUP_STAGE1_MS).toISOString();
+    await ctx.db
+      .from("conversations")
+      .update({ material_sent_at: new Date().toISOString(), followup_stage: 1, next_followup_at: nextFollowup })
+      .eq("id", ctx.conversationId);
+  }
+
+  return { ok: true, ...resultado };
 }
 
 async function toolOferecerVisita(ctx: ToolContext) {
@@ -237,7 +255,7 @@ export async function executeTool(name: string, args: Record<string, unknown>, c
     case "focar_imovel":
       return toolFocarImovel(ctx, args);
     case "enviar_material":
-      return toolEnviarMaterial(ctx, args);
+      return toolEnviarMaterial(ctx);
     case "oferecer_visita":
       return toolOferecerVisita(ctx);
     case "registrar_nome":

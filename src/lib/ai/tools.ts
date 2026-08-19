@@ -40,14 +40,8 @@ export const TOOLS = [
     function: {
       name: "enviar_material",
       description:
-        "Envia de verdade, pelo WhatsApp, o material do imóvel em foco: copy (texto), video (criativo) ou pdf (fotos+detalhes). Chame um tipo por vez. Só diga ao cliente que mandou algo DEPOIS de receber o resultado desta tool confirmando enviado=true.",
-      parameters: {
-        type: "object",
-        properties: {
-          tipo: { type: "string", enum: ["copy", "video", "pdf"] },
-        },
-        required: ["tipo"],
-      },
+        "Envia de verdade, pelo WhatsApp, TODO o material do imóvel em foco de uma vez só: copy (texto), vídeo do criativo (se existir) e PDF (se existir). Uma chamada manda o bloco inteiro — não precisa (e não deve) chamar de novo pra completar. Confirme ao cliente SÓ o que o resultado da tool disser que foi enviado de verdade (enviado_copy/enviado_video/enviado_pdf) — nunca diga 'mandei tudo' sem checar.",
+      parameters: { type: "object", properties: {} },
     },
   },
   {
