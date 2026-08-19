@@ -49,8 +49,8 @@ export function PropertyForm({ property }: { property?: Property }) {
         <Field label="Quartos" name="bedrooms" type="number" defaultValue={property?.bedrooms ?? undefined} />
         <Field label="Suítes" name="suites" type="number" defaultValue={property?.suites ?? undefined} />
         <Field label="Vagas" name="parking_spots" type="number" defaultValue={property?.parking_spots ?? undefined} />
-        <Field label="Área construída (m²)" name="area_built" type="number" defaultValue={property?.area_built ?? undefined} />
-        <Field label="Área terreno (m²)" name="area_land" type="number" defaultValue={property?.area_land ?? undefined} />
+        <Field label="Construída (m²)" name="area_built" type="number" defaultValue={property?.area_built ?? undefined} />
+        <Field label="Terreno (m²)" name="area_land" type="number" defaultValue={property?.area_land ?? undefined} />
         <Field
           label="Características (separadas por vírgula)"
           name="features"
