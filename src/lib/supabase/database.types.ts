@@ -398,7 +398,53 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
-      [_ in never]: never
+      buscar_imoveis_fuzzy: {
+        Args: {
+          p_localizacao?: string
+          p_preco_max?: number
+          p_preco_min?: number
+          p_quartos_min?: number
+          p_tipo?: string
+          p_tipo_imovel?: string
+        }
+        Returns: {
+          ad_ref_titles: string[]
+          address: string | null
+          area_built: number | null
+          area_land: number | null
+          bedrooms: number | null
+          city: string | null
+          condo_fee: number | null
+          copy: string
+          created_at: string
+          created_by: string | null
+          features: string[]
+          id: string
+          iptu: number | null
+          kind: string | null
+          kind_synonyms: string[]
+          neighborhood: string | null
+          parking_spots: number | null
+          pdf_url: string | null
+          photo_urls: string[]
+          price: number | null
+          responsible_user_id: string | null
+          status: Database["public"]["Enums"]["property_status"]
+          suites: number | null
+          title: string
+          type: Database["public"]["Enums"]["property_type"]
+          updated_at: string
+          video_url: string | null
+        }[]
+        SetofOptions: {
+          from: "*"
+          to: "properties"
+          isOneToOne: false
+          isSetofReturn: true
+        }
+      }
+      show_limit: { Args: never; Returns: number }
+      show_trgm: { Args: { "": string }; Returns: string[] }
     }
     Enums: {
       conversation_status: "bot" | "queued" | "open" | "closed"

@@ -4,12 +4,16 @@ export const TOOLS = [
     function: {
       name: "buscar_imovel",
       description:
-        "Busca imóveis ativos por filtro estruturado. Use quando a pessoa não veio de um anúncio identificado ou quer ver outras opções. Preencha SÓ os campos que a pessoa realmente mencionou — não invente cidade/bairro/tipo que ela não disse. NUNCA invente resultado — sempre chame isso antes de listar imóveis que não estão no contexto já injetado.",
+        "Busca imóveis ativos por filtro estruturado. Use quando a pessoa não veio de um anúncio identificado ou quer ver outras opções. Preencha SÓ os campos que a pessoa realmente mencionou — não invente cidade/bairro/tipo que ela não disse. A busca de localização é APROXIMADA (tolera erro de grafia, e também olha endereço/descrição — então avenida próxima ou ponto de referência que a pessoa citar também pode bater). NUNCA invente resultado — sempre chame isso antes de listar imóveis que não estão no contexto já injetado. Se voltar vazio, pode tentar de novo com um termo mais genérico antes de dizer que não tem.",
       parameters: {
         type: "object",
         properties: {
           cidade: { type: "string", description: "Cidade, se a pessoa mencionou (ex: São Paulo)" },
-          bairro: { type: "string", description: "Bairro ou região específica, se a pessoa mencionou (ex: Vila Madalena) — NÃO coloque a cidade aqui" },
+          bairro: {
+            type: "string",
+            description:
+              "Bairro, região, avenida próxima ou ponto de referência que a pessoa mencionou (ex: Vila Madalena, ou 'perto do Parque Villa Lobos') — NÃO coloque a cidade aqui. Pode escrever como a pessoa falou, não precisa ser a grafia exata.",
+          },
           tipo_imovel: {
             type: "string",
             description: "Tipo físico do imóvel, se a pessoa mencionou (ex: casa, apartamento, sobrado, cobertura, terreno) — não confundir com venda/locação",

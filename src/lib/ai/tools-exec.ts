@@ -18,38 +18,45 @@ const HANDOFF_RENOTIFY_MS = 10 * 60 * 1000;
 const FOLLOWUP_STAGE1_MS = 2 * 60 * 60 * 1000; // +2h: avaliou? quer visitar?
 
 async function toolBuscarImovel(db: Db, args: Record<string, unknown>) {
-  let q = db
-    .from("properties")
-    .select("id,title,type,kind,kind_synonyms,price,city,neighborhood,bedrooms,status", { count: "exact" })
-    .eq("status", "ativo");
-  if (typeof args.cidade === "string" && args.cidade.trim()) q = q.ilike("city", `%${args.cidade.trim()}%`);
-  if (typeof args.bairro === "string" && args.bairro.trim()) q = q.ilike("neighborhood", `%${args.bairro.trim()}%`);
-  if (typeof args.tipo_imovel === "string" && args.tipo_imovel.trim()) {
-    // "tipo" tem vocabulário variado (studio/kitnet/apê = apartamento) — bate no kind OU
-    // nos sinônimos cadastrados, nunca só no valor exato (achado real: "studio" não batia
-    // com kind="apartamento" e o bot dizia "não temos" pra um imóvel que existia)
-    const termo = args.tipo_imovel.trim().toLowerCase().replace(/[,{}]/g, "");
-    q = q.or(`kind.ilike.%${termo}%,kind_synonyms.cs.{${termo}}`);
-  }
-  if (args.tipo === "venda" || args.tipo === "locacao") q = q.eq("type", args.tipo);
-  if (typeof args.preco_max === "number") q = q.lte("price", args.preco_max);
-  if (typeof args.preco_min === "number") q = q.gte("price", args.preco_min);
-  if (typeof args.quartos_min === "number") q = q.gte("bedrooms", args.quartos_min);
+  // bairro é mais específico que cidade — prioriza ele quando os dois vierem
+  const localizacao =
+    (typeof args.bairro === "string" && args.bairro.trim()) ||
+    (typeof args.cidade === "string" && args.cidade.trim()) ||
+    undefined;
 
-  const { data, error, count } = await q.limit(8);
+  const { data, error } = await db.rpc("buscar_imoveis_fuzzy", {
+    p_localizacao: localizacao,
+    p_tipo_imovel: (typeof args.tipo_imovel === "string" ? args.tipo_imovel.trim() : "") || undefined,
+    p_tipo: args.tipo === "venda" || args.tipo === "locacao" ? args.tipo : undefined,
+    p_preco_max: typeof args.preco_max === "number" ? args.preco_max : undefined,
+    p_preco_min: typeof args.preco_min === "number" ? args.preco_min : undefined,
+    p_quartos_min: typeof args.quartos_min === "number" ? args.quartos_min : undefined,
+  });
   if (error) return { ok: false, error: "falha na busca" };
-  const total = count ?? data?.length ?? 0;
+
+  const encontrados = data ?? [];
   // preço NUNCA vem nessa listagem — força o modelo a não citar preço solto ao apresentar
   // várias opções (achado real: bot listava com preço mesmo sendo instruído a não fazer isso
   // só no prompt). Preço só aparece via focar_imovel + enviar_material, já com todo o contexto.
-  const imoveis = (data ?? []).map(({ price: _price, ...rest }) => rest);
+  const imoveis = encontrados.map(({ id, title, kind, type, city, neighborhood, bedrooms, status }) => ({
+    id,
+    title,
+    kind,
+    type,
+    city,
+    neighborhood,
+    bedrooms,
+    status,
+  }));
   return {
     ok: true,
     imoveis,
-    total_encontrado: total,
+    total_encontrado: imoveis.length,
     aviso_preco: "Preço PROPOSITALMENTE não veio nesses resultados — não invente nem estime. Só mencione preço depois de focar num imóvel e mandar o material completo dele.",
-    // aviso explícito pro modelo não inventar "mais opções" quando já mostrou tudo que existe
-    aviso: total <= (data?.length ?? 0) ? "esta lista é TUDO que bateu com o filtro, não existe mais nada além disso pra oferecer" : `mostrando ${data?.length} de ${total} — há mais resultados, pode refinar o filtro se a pessoa quiser`,
+    aviso:
+      imoveis.length === 0
+        ? "nada bateu com o filtro — antes de dizer que não tem, considere se o termo pode ter outra grafia/variação e tente de novo com um termo mais genérico (ex: só a cidade, ou só o tipo)"
+        : "a busca já é aproximada (tolera erro de grafia e sinônimo) — se voltou vazio de verdade, é porque não tem mesmo",
   };
 }
 
