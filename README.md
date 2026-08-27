@@ -7,7 +7,7 @@ Agente de IA para WhatsApp (imobiliária GINES) + painel de cadastro de imóveis
 - Banco Supabase **provisionado e com o schema aplicado** (projeto `gines-atendimento`, região `sa-east-1`).
 - Storage bucket `property-media` criado (upload de vídeo/PDF/fotos por imóvel).
 - Painel admin: login, cadastro/edição de imóvel com upload, inbox com fila de handoff.
-- Núcleo do agente: prompt em camadas, 6 tools (function calling), motor de follow-up (2h → 6h → 48h em loop), detecção de "promessa vazia", lock/dedup/debounce de mensagens.
+- Núcleo do agente: prompt em camadas, 6 tools (function calling), motor de follow-up (D1 fim de tarde → D3 manhã → D7 início da tarde, e encerra), detecção de "promessa vazia", lock/dedup/debounce de mensagens.
 - Webhook único da uazapi + endpoints de debug (protegidos, só funcionam com `DEBUG=true`).
 
 ## O que falta você me dar pra ele "ficar no ar" de verdade
@@ -72,7 +72,7 @@ As demais variáveis (`SUPABASE_SERVICE_ROLE_KEY`, `OPENAI_API_KEY`, `UAZAPI_*`,
 - **Supabase** (Postgres + Auth + Storage) — `properties`, `contacts`, `conversations`, `messages`, `ad_referrals`, `app_logs`.
 - **uazapi** — canal WhatsApp, webhook único (`/api/webhooks/uazapi`).
 - **OpenAI** (`gpt-4.1-mini` por padrão, configurável via `OPENAI_MODEL`) — function calling, 6 tools: `buscar_imovel`, `focar_imovel`, `enviar_material`, `registrar_nome`, `transferir_para_humano`, `finalizar_atendimento`.
-- **Motor de follow-up** — cron externo bate em `/api/cron`, avança conversas por `next_followup_at`/`followup_stage` (2h → 6h → 48h em loop), respeitando horário comercial (seg-sáb 8h-20h).
+- **Motor de follow-up** — cron externo bate em `/api/cron`, avança conversas por `next_followup_at`/`followup_stage` na régua do Gines: **D1 fim de tarde (17h30) → D3 manhã (10h) → D7 início da tarde (14h30) → encerra**. Os dias contam a partir do envio do material. Janela permitida 09h30–19h30 (domingo bloqueado), com alternância obrigatória de turnos — nunca dois follow-ups seguidos no mesmo turno. Resposta negativa em qualquer etapa dispara a despedida e interrompe a régua permanentemente (`opt_out`).
 - **Handoff** — `transferir_para_humano` põe a conversa em `queued` e avisa o grupo da equipe; a IA continua respondendo até um corretor clicar "Assumir" no painel — só aí ela desliga pra aquela conversa.
 
 ## Fora do escopo desta v1 (decisão deliberada, pra manter direto)

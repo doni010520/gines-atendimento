@@ -1,6 +1,8 @@
 import { createServiceClient } from "@/lib/supabase/service";
 import { sendText, sendMedia } from "@/lib/whatsapp/uazapi";
 import { logEvent } from "@/lib/log";
+import { scheduleStage, STAGE_DONE } from "@/lib/followup/engine";
+import { copyOptOut, MENSAGEM_HANDOFF } from "@/lib/followup/messages";
 
 type Db = ReturnType<typeof createServiceClient>;
 
@@ -11,11 +13,12 @@ export type ToolContext = {
   contactId: string;
   propertyId: string | null;
   materialSentAt: string | null;
-  visitOffered: boolean;
+  visitOffersCount: number;
 };
 
 const HANDOFF_RENOTIFY_MS = 10 * 60 * 1000;
-const FOLLOWUP_STAGE1_MS = 2 * 60 * 60 * 1000; // +2h: avaliou? quer visitar?
+/** Teto de convites de visita por conversa — regra do Gines: nunca mais de dois. */
+const MAX_VISIT_OFFERS = 2;
 
 async function toolBuscarImovel(db: Db, args: Record<string, unknown>) {
   // bairro é mais específico que cidade — prioriza ele quando os dois vierem
@@ -147,10 +150,16 @@ async function toolEnviarMaterial(ctx: ToolContext) {
   }
 
   if (!ctx.materialSentAt && (resultado.enviado_copy || resultado.enviado_video || resultado.enviado_pdf)) {
-    const nextFollowup = new Date(Date.now() + FOLLOWUP_STAGE1_MS).toISOString();
+    // material enviado = entrada na régua. O D1 sai no fim da tarde, não daqui a X horas.
+    const agora = new Date();
+    const dia1 = scheduleStage(1, agora, null, agora);
     await ctx.db
       .from("conversations")
-      .update({ material_sent_at: new Date().toISOString(), followup_stage: 1, next_followup_at: nextFollowup })
+      .update({
+        material_sent_at: agora.toISOString(),
+        followup_stage: 1,
+        next_followup_at: dia1?.at.toISOString() ?? null,
+      })
       .eq("id", ctx.conversationId);
   }
 
@@ -158,11 +167,20 @@ async function toolEnviarMaterial(ctx: ToolContext) {
 }
 
 async function toolOferecerVisita(ctx: ToolContext) {
-  if (ctx.visitOffered) {
-    return { ok: true, ja_oferecido: true, aviso: "já foi oferecido antes nesta conversa — não repita o convite" };
+  if (ctx.visitOffersCount >= MAX_VISIT_OFFERS) {
+    return {
+      ok: true,
+      convites_feitos: ctx.visitOffersCount,
+      limite_atingido: true,
+      aviso: "o teto de 2 convites nesta conversa já foi atingido — responda a dúvida sem convidar de novo",
+    };
   }
-  await ctx.db.from("conversations").update({ visit_offered: true }).eq("id", ctx.conversationId);
-  return { ok: true, ja_oferecido: false };
+  const total = ctx.visitOffersCount + 1;
+  await ctx.db
+    .from("conversations")
+    .update({ visit_offered: true, visit_offers_count: total })
+    .eq("id", ctx.conversationId);
+  return { ok: true, convites_feitos: total, limite_atingido: total >= MAX_VISIT_OFFERS };
 }
 
 async function toolRegistrarNome(ctx: ToolContext, args: Record<string, unknown>) {
@@ -237,22 +255,56 @@ async function toolTransferirParaHumano(ctx: ToolContext, args: Record<string, u
       .eq("id", ctx.conversationId);
   }
 
-  return { ok: true };
+  return {
+    ok: true,
+    mensagem_para_o_cliente: MENSAGEM_HANDOFF,
+    instrucao: "responda ao cliente EXATAMENTE com mensagem_para_o_cliente, sem acrescentar nada",
+  };
 }
 
+/**
+ * Regra de ouro do Gines: resposta negativa em qualquer etapa encerra a cadência de vez.
+ * A despedida é texto fixo e sai daqui — não passa pelo modelo — e `opt_out` trava a régua
+ * mesmo se a conversa for reaberta depois.
+ */
 async function toolFinalizarAtendimento(ctx: ToolContext, args: Record<string, unknown>) {
   const motivo = typeof args.motivo === "string" ? args.motivo : "nao_interessado";
+
+  const { data: contact } = await ctx.db.from("contacts").select("name").eq("id", ctx.contactId).single();
+  const despedida = copyOptOut(contact?.name ?? null);
+
   await ctx.db
     .from("conversations")
-    .update({ status: "closed", next_followup_at: null, closed_at: new Date().toISOString() })
+    .update({
+      status: "closed",
+      opt_out: true,
+      followup_stage: STAGE_DONE,
+      next_followup_at: null,
+      closed_at: new Date().toISOString(),
+    })
     .eq("id", ctx.conversationId);
+
+  await sendText(ctx.phone, despedida).catch((err) =>
+    logEvent("error", "opt_out", "falha ao enviar despedida", {
+      conversationId: ctx.conversationId,
+      error: err instanceof Error ? err.message : String(err),
+    })
+  );
+
   await ctx.db.from("messages").insert({
     conversation_id: ctx.conversationId,
     direction: "out",
-    body: `[atendimento encerrado] motivo=${motivo}`,
+    body: despedida,
+    is_internal: false,
+  });
+  await ctx.db.from("messages").insert({
+    conversation_id: ctx.conversationId,
+    direction: "out",
+    body: `[atendimento encerrado] motivo=${motivo} — régua interrompida permanentemente`,
     is_internal: true,
   });
-  return { ok: true };
+
+  return { ok: true, despedida_enviada: true, instrucao: "não escreva mais nada — a despedida já foi enviada" };
 }
 
 export async function executeTool(name: string, args: Record<string, unknown>, ctx: ToolContext) {

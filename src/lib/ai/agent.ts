@@ -115,7 +115,7 @@ export async function runAgentTurn(conversationId: string) {
       nameConfirmed: contact.name_confirmed,
       focusedProperty: focusedProperty ?? null,
       totalActiveProperties: totalActiveProperties ?? 0,
-      visitOffered: conversation.visit_offered,
+      visitOffersCount: conversation.visit_offers_count,
       nowIso: new Date().toISOString(),
     });
 
@@ -138,10 +138,13 @@ export async function runAgentTurn(conversationId: string) {
       contactId: contact.id,
       propertyId: conversation.property_id,
       materialSentAt: conversation.material_sent_at,
-      visitOffered: conversation.visit_offered,
+      visitOffersCount: conversation.visit_offers_count,
     };
 
     let toolWasCalled = false;
+    // a despedida do opt-out sai da própria tool; qualquer texto do modelo depois disso
+    // seria uma segunda mensagem em cima de um "não tenho interesse"
+    let atendimentoFinalizado = false;
     let finalText = "";
 
     for (let step = 0; step < MAX_ITERATIONS; step++) {
@@ -173,7 +176,10 @@ export async function runAgentTurn(conversationId: string) {
             toolCtx.materialSentAt = toolCtx.materialSentAt ?? new Date().toISOString();
           }
           if (toolCall.function.name === "oferecer_visita") {
-            toolCtx.visitOffered = true;
+            toolCtx.visitOffersCount += 1;
+          }
+          if (toolCall.function.name === "finalizar_atendimento") {
+            atendimentoFinalizado = true;
           }
         }
         continue;
@@ -182,6 +188,8 @@ export async function runAgentTurn(conversationId: string) {
       finalText = msg.content ?? "";
       break;
     }
+
+    if (atendimentoFinalizado) finalText = "";
 
     if (finalText && PROMISE_RE.test(finalText) && !toolWasCalled) {
       await logEvent("warn", "agent", "promessa vazia detectada — nenhuma tool foi chamada", {

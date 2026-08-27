@@ -125,6 +125,10 @@ export async function saveProperty(formData: FormData) {
     copy,
     features,
     ad_ref_titles: adRefTitles,
+    // dados do imóvel mudaram: os destaques usados nas copies de follow-up têm que
+    // ser gerados de novo a partir da base nova, não do que estava em cache
+    highlight_visual: null,
+    highlight_tecnico: null,
     ...(videoUrl ? { video_url: videoUrl } : {}),
     ...(pdfUrl ? { pdf_url: pdfUrl } : {}),
     ...(photoUrls.length ? { photo_urls: photoUrls } : {}),

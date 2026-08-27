@@ -53,7 +53,7 @@ export const TOOLS = [
     function: {
       name: "oferecer_visita",
       description:
-        "Convida a pessoa pra marcar uma visita ao imóvel. Chame isso NO MÁXIMO UMA VEZ por conversa — o contexto injetado diz se já foi oferecido. Se já foi oferecido e a pessoa não pediu de novo, NÃO chame — apenas responda a dúvida dela normalmente. O próximo lembrete de visita é automático (follow-up), não depende de você insistir.",
+        "Registra e faz o convite de visita ao imóvel. Chame sempre que fechar uma resposta com o convite — é ela que conta o teto. LIMITE: no máximo DOIS convites por conversa (o contexto injetado diz quantos já foram feitos). Atingido o teto, não convide mais por iniciativa própria: responda a dúvida normalmente. A visita é agendada com só 1 hora de antecedência, em qualquer dia da semana. Os próximos lembretes são automáticos (follow-up), não dependem de você insistir.",
       parameters: { type: "object", properties: {} },
     },
   },
@@ -74,7 +74,7 @@ export const TOOLS = [
     function: {
       name: "transferir_para_humano",
       description:
-        "Transfere a conversa para um corretor humano. Chame IMEDIATAMENTE quando: a pessoa topar visitar o imóvel, pedir para falar com uma pessoa/corretor/GINES, ou fizer uma pergunta que você não consegue responder com os dados disponíveis. A IA continua respondendo normalmente até um corretor assumir de fato — isso não te desliga.",
+        "Transfere a conversa para o Gines. Chame IMEDIATAMENTE quando: a pessoa quiser agendar visita ou visitar imediatamente, pedir para falar com uma pessoa/corretor/GINES, ou fizer uma pergunta sobre o imóvel ou a negociação que não está na KNOWLEDGE_BASE_IMOVEL. A tool devolve em mensagem_para_o_cliente a frase EXATA que você deve responder — não escreva nada além dela. A IA continua respondendo normalmente até um humano assumir de fato: isso não te desliga.",
       parameters: {
         type: "object",
         properties: {
@@ -93,7 +93,7 @@ export const TOOLS = [
     function: {
       name: "finalizar_atendimento",
       description:
-        "Encerra o atendimento (para o motor de follow-up) quando a pessoa disser claramente que não tem mais interesse, já comprou/alugou em outro lugar, foi engano, ou pedir pra não receber mais mensagens.",
+        "Encerra o atendimento e interrompe a régua de follow-up PERMANENTEMENTE quando a pessoa responder de forma negativa em qualquer etapa: não tem interesse, já comprou/alugou em outro lugar, foi engano, ou pediu pra não receber mais mensagens. A própria tool envia a despedida ao cliente — depois de chamá-la, não escreva mais nada.",
       parameters: {
         type: "object",
         properties: {

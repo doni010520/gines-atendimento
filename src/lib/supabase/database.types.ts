@@ -147,6 +147,9 @@ export type Database = {
           status: Database["public"]["Enums"]["conversation_status"]
           summary: string | null
           visit_offered: boolean
+          last_followup_shift: string | null
+          opt_out: boolean
+          visit_offers_count: number
         }
         Insert: {
           ai_enabled?: boolean
@@ -165,6 +168,9 @@ export type Database = {
           status?: Database["public"]["Enums"]["conversation_status"]
           summary?: string | null
           visit_offered?: boolean
+          last_followup_shift?: string | null
+          opt_out?: boolean
+          visit_offers_count?: number
         }
         Update: {
           ai_enabled?: boolean
@@ -183,6 +189,9 @@ export type Database = {
           status?: Database["public"]["Enums"]["conversation_status"]
           summary?: string | null
           visit_offered?: boolean
+          last_followup_shift?: string | null
+          opt_out?: boolean
+          visit_offers_count?: number
         }
         Relationships: [
           {
@@ -305,6 +314,8 @@ export type Database = {
           iptu: number | null
           kind: string | null
           kind_synonyms: string[]
+          highlight_tecnico: string | null
+          highlight_visual: string | null
           neighborhood: string | null
           parking_spots: number | null
           pdf_url: string | null
@@ -334,6 +345,8 @@ export type Database = {
           iptu?: number | null
           kind?: string | null
           kind_synonyms?: string[]
+          highlight_tecnico?: string | null
+          highlight_visual?: string | null
           neighborhood?: string | null
           parking_spots?: number | null
           pdf_url?: string | null
@@ -363,6 +376,8 @@ export type Database = {
           iptu?: number | null
           kind?: string | null
           kind_synonyms?: string[]
+          highlight_tecnico?: string | null
+          highlight_visual?: string | null
           neighborhood?: string | null
           parking_spots?: number | null
           pdf_url?: string | null
@@ -423,6 +438,8 @@ export type Database = {
           iptu: number | null
           kind: string | null
           kind_synonyms: string[]
+          highlight_tecnico: string | null
+          highlight_visual: string | null
           neighborhood: string | null
           parking_spots: number | null
           pdf_url: string | null

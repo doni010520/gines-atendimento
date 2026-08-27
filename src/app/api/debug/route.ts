@@ -1,6 +1,15 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createServiceClient } from "@/lib/supabase/service";
 import { executeTool, type ToolContext } from "@/lib/ai/tools-exec";
+import {
+  buildCopyVars,
+  renderStage,
+  scheduleStage,
+  PROPERTY_COPY_COLUMNS,
+  type PropertyForCopy,
+} from "@/lib/followup/engine";
+import { copyOptOut, MENSAGEM_HANDOFF } from "@/lib/followup/messages";
+import { SHIFT_LABEL, type Shift } from "@/lib/followup/business-hours";
 
 export const dynamic = "force-dynamic";
 
@@ -10,6 +19,7 @@ export const dynamic = "force-dynamic";
  *
  *   GET /api/debug?token=...&action=recent-messages&conversationId=...
  *   GET /api/debug?token=...&action=logs&limit=50
+ *   GET /api/debug?token=...&action=regua-preview[&propertyId=...&nome=Ricardo]
  *   POST /api/debug?token=...&action=test-tool  body: { conversationId, name, args }
  */
 function isAuthorized(req: NextRequest) {
@@ -42,6 +52,84 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ ok: !error, data, error: error?.message });
   }
 
+  /**
+   * Mostra as 3 mensagens da régua exatamente como o cliente receberia, com os dados reais
+   * do imóvel, e quando cada uma sairia se o material fosse enviado agora. NÃO envia nada.
+   * Sem propertyId, lista os imóveis ativos pra escolher.
+   */
+  if (action === "regua-preview") {
+    const propertyId = req.nextUrl.searchParams.get("propertyId");
+    const nome = req.nextUrl.searchParams.get("nome");
+
+    if (!propertyId) {
+      const { data, error } = await db
+        .from("properties")
+        .select("id,title,kind,neighborhood,status")
+        .eq("status", "ativo")
+        .order("created_at", { ascending: false });
+      return NextResponse.json({
+        ok: !error,
+        aviso: "escolha um e repita com &propertyId=<id>",
+        imoveis: data,
+        error: error?.message,
+      });
+    }
+
+    const { data: property, error } = await db
+      .from("properties")
+      .select(PROPERTY_COPY_COLUMNS)
+      .eq("id", propertyId)
+      .maybeSingle();
+    if (error || !property) {
+      return NextResponse.json({ ok: false, error: error?.message ?? "imóvel não encontrado" }, { status: 404 });
+    }
+
+    const now = new Date();
+    const vars = await buildCopyVars(db, property as PropertyForCopy, nome, now);
+
+    // encadeia os 3 estágios como o motor faria, respeitando a alternância de turnos
+    const agenda: Array<{ at: Date; shift: Shift } | null> = [];
+    let lastShift: Shift | null = null;
+    for (const stage of [1, 2, 3]) {
+      const slot = scheduleStage(stage, now, lastShift, now);
+      agenda.push(slot);
+      lastShift = slot?.shift ?? lastShift;
+    }
+
+    const quando = (slot: { at: Date; shift: Shift } | null) =>
+      slot
+        ? `${new Intl.DateTimeFormat("pt-BR", {
+            weekday: "short",
+            day: "2-digit",
+            month: "2-digit",
+            hour: "2-digit",
+            minute: "2-digit",
+            hour12: false,
+            timeZone: "America/Sao_Paulo",
+          }).format(slot.at)} (${SHIFT_LABEL[slot.shift]})`
+        : "—";
+
+    return NextResponse.json({
+      ok: true,
+      imovel: { id: property.id, titulo: property.title, tipo: vars.tipo, local: vars.local },
+      destaques_extraidos: {
+        visual: vars.destaqueVisual || "(nenhum sustentado pela base — a frase sai da copy)",
+        tecnico: vars.destaqueTecnico || "(nenhum sustentado pela base — a frase sai da copy)",
+        base_afirma_reforma: vars.reformado,
+      },
+      simulacao: "considerando que o material fosse enviado agora",
+      regua: [
+        { etapa: "D1", quando: quando(agenda[0]), mensagem: renderStage(1, vars) },
+        { etapa: "D3", quando: quando(agenda[1]), mensagem: renderStage(2, vars) },
+        { etapa: "D7", quando: quando(agenda[2]), mensagem: renderStage(3, vars) },
+      ],
+      frases_fixas: {
+        opt_out: copyOptOut(nome),
+        handoff: MENSAGEM_HANDOFF,
+      },
+    });
+  }
+
   return NextResponse.json({ ok: false, error: "action desconhecida" }, { status: 400 });
 }
 
@@ -69,7 +157,7 @@ export async function POST(req: NextRequest) {
     contactId: contact.id,
     propertyId: conversation.property_id,
     materialSentAt: conversation.material_sent_at,
-    visitOffered: conversation.visit_offered,
+    visitOffersCount: conversation.visit_offers_count,
   };
 
   // CUIDADO: enviar_material manda mensagem de WhatsApp de verdade se o número for real.
