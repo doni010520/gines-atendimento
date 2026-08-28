@@ -92,17 +92,20 @@ export function copyDia3(v: CopyVars): string {
     `Gostaria de ver o nível do acabamento pessoalmente? ` +
     `Como temos muita flexibilidade de horários, você escolhe o melhor dia e eu organizo o acesso rapidinho para você.`;
 
-  const tecnico = v.destaqueTecnico ? `${g.artigo} ${v.tipo} já conta com ${v.destaqueTecnico}. ` : "";
-
   if (v.reformado) {
+    // aqui o substantivo repetido é do texto original do Gines — vem depois de duas frases,
+    // então não soa repetitivo como colado na abertura
+    const tecnico = v.destaqueTecnico ? `Além disso, ${g.artigo} ${v.tipo} já conta com ${v.destaqueTecnico}. ` : "";
     return (
       `${abertura} ${g.pronome} foi 100% ${g.reformado} e ${g.modernizado}. ` +
       `É literalmente receber as chaves e mudar, sem nenhuma dor de cabeça com obras. ` +
-      (tecnico ? `Além disso, ${tecnico}` : "") +
+      tecnico +
       fechamento
     );
   }
-  if (tecnico) return `${abertura} ${tecnico}${fechamento}`;
+  // sem a frase da reforma, o técnico encosta na abertura — usa pronome pra não repetir
+  // o substantivo ("desse sobrado: o sobrado já conta com...")
+  if (v.destaqueTecnico) return `${abertura} ${g.pronome} já conta com ${v.destaqueTecnico}. ${fechamento}`;
   // nem reforma nem diferencial cadastrado: vira um retorno honesto, sem promessa nenhuma
   return `${v.saudacao}${vocativo(v.nome)}! Tudo bem? Passando para saber se ficou alguma dúvida sobre ${g.esse} ${v.tipo}. ${fechamento}`;
 }
