@@ -142,15 +142,11 @@ type DueConversation = {
 /** @returns true se a mensagem foi enviada de fato (false = só reagendou). */
 async function processOne(db: ReturnType<typeof createServiceClient>, conv: DueConversation): Promise<boolean> {
   const now = new Date();
-  const stage = conv.followup_stage;
-  const preferido = STAGE_SHIFT[stage];
+  const preferido = STAGE_SHIFT[conv.followup_stage];
 
   // estágio fora da régua (dado antigo, migração): encerra em vez de tentar adivinhar turno
   if (!preferido) {
-    await db
-      .from("conversations")
-      .update({ followup_stage: STAGE_DONE, next_followup_at: null })
-      .eq("id", conv.id);
+    await encerrarRegua(db, conv.id);
     return false;
   }
 
@@ -166,8 +162,43 @@ async function processOne(db: ReturnType<typeof createServiceClient>, conv: DueC
     return false;
   }
 
+  const resultado = await enviarEstagio(db, conv, shift, now);
+  return resultado.enviado;
+}
+
+async function encerrarRegua(db: ReturnType<typeof createServiceClient>, conversationId: string) {
+  await db
+    .from("conversations")
+    .update({ followup_stage: STAGE_DONE, next_followup_at: null })
+    .eq("id", conversationId);
+}
+
+export type ResultadoEnvio = {
+  enviado: boolean;
+  motivo?: string;
+  etapa?: string;
+  turno?: Shift;
+  mensagem?: string;
+  proximo?: { quando: string; turno: Shift } | null;
+};
+
+const ETAPA_LABEL: Record<number, string> = { 1: "D1", 2: "D3", 3: "D7" };
+
+/**
+ * Monta a copy do estágio atual, envia e avança o estado da conversa.
+ * Único ponto que manda follow-up — o cron e o disparo manual de teste passam os dois por
+ * aqui, senão o teste validaria um caminho que a produção não usa.
+ */
+async function enviarEstagio(
+  db: ReturnType<typeof createServiceClient>,
+  conv: DueConversation,
+  shift: Shift,
+  now: Date
+): Promise<ResultadoEnvio> {
+  const stage = conv.followup_stage;
+
   const { data: contact } = await db.from("contacts").select("phone,name").eq("id", conv.contact_id).single();
-  if (!contact) return false;
+  if (!contact) return { enviado: false, motivo: "contato não encontrado" };
 
   const { data: property } = conv.property_id
     ? await db.from("properties").select(PROPERTY_COPY_COLUMNS).eq("id", conv.property_id).maybeSingle()
@@ -175,12 +206,9 @@ async function processOne(db: ReturnType<typeof createServiceClient>, conv: DueC
 
   // sem imóvel em foco não existe copy honesta pra mandar — encerra a régua e deixa pro humano
   if (!property) {
-    await db
-      .from("conversations")
-      .update({ followup_stage: STAGE_DONE, next_followup_at: null })
-      .eq("id", conv.id);
+    await encerrarRegua(db, conv.id);
     await logEvent("warn", "followup", "conversa sem imóvel em foco — régua encerrada", { conversationId: conv.id });
-    return false;
+    return { enviado: false, motivo: "conversa sem imóvel em foco — régua encerrada" };
   }
 
   const vars = await buildCopyVars(db, property, contact.name, now);
@@ -208,5 +236,52 @@ async function processOne(db: ReturnType<typeof createServiceClient>, conv: DueC
     is_internal: false,
   });
 
-  return true;
+  return {
+    enviado: true,
+    etapa: ETAPA_LABEL[stage],
+    turno: shift,
+    mensagem: body,
+    proximo: proximo ? { quando: proximo.at.toISOString(), turno: proximo.shift } : null,
+  };
+}
+
+/**
+ * Dispara o estágio atual AGORA, ignorando a janela de horário — só pra teste.
+ * Manda WhatsApp de verdade e avança o estado igual ao cron, por isso vive atrás do
+ * /api/debug (DEBUG=true + token + confirmação explícita).
+ */
+export async function dispararEstagioAgora(
+  db: ReturnType<typeof createServiceClient>,
+  conversationId: string
+): Promise<ResultadoEnvio> {
+  const { data: conv } = await db
+    .from("conversations")
+    .select("id,contact_id,property_id,followup_stage,last_followup_shift,material_sent_at,opt_out,status,ai_enabled")
+    .eq("id", conversationId)
+    .maybeSingle();
+
+  if (!conv) return { enviado: false, motivo: "conversa não encontrada" };
+  if (conv.opt_out) return { enviado: false, motivo: "conversa com opt-out — a régua está travada de propósito" };
+  // mesma condição do cron: humano assumiu, o robô não fala mais. Sem isso, um teste
+  // mandaria follow-up pra cliente real que já está sendo atendido por gente.
+  if (conv.status !== "bot" || !conv.ai_enabled) {
+    return {
+      enviado: false,
+      motivo: `conversa está em "${conv.status}" com IA ${conv.ai_enabled ? "ligada" : "desligada"} — o cron também não tocaria nela. Devolva pro robô no painel se quiser testar aqui.`,
+    };
+  }
+
+  const preferido = STAGE_SHIFT[conv.followup_stage];
+  if (!preferido) {
+    return {
+      enviado: false,
+      motivo:
+        conv.followup_stage >= STAGE_DONE
+          ? "régua já encerrada (o D7 foi o último contato ativo)"
+          : "conversa ainda não entrou na régua — o material precisa ser enviado antes",
+    };
+  }
+
+  const shift = resolveShift(preferido, parseShift(conv.last_followup_shift));
+  return enviarEstagio(db, conv, shift, new Date());
 }

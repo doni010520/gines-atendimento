@@ -3,6 +3,7 @@ import { createServiceClient } from "@/lib/supabase/service";
 import { executeTool, type ToolContext } from "@/lib/ai/tools-exec";
 import {
   buildCopyVars,
+  dispararEstagioAgora,
   renderStage,
   scheduleStage,
   PROPERTY_COPY_COLUMNS,
@@ -21,6 +22,7 @@ export const dynamic = "force-dynamic";
  *   GET /api/debug?token=...&action=logs&limit=50
  *   GET /api/debug?token=...&action=regua-preview[&propertyId=...&nome=Ricardo]
  *   POST /api/debug?token=...&action=test-tool  body: { conversationId, name, args }
+ *   POST /api/debug?token=...&action=regua-disparar&confirmar=1  body: { conversationId }
  */
 function isAuthorized(req: NextRequest) {
   if (process.env.DEBUG !== "true") return false;
@@ -136,6 +138,28 @@ export async function GET(req: NextRequest) {
 export async function POST(req: NextRequest) {
   if (!isAuthorized(req)) return NextResponse.json({ ok: false }, { status: 404 });
   const action = req.nextUrl.searchParams.get("action");
+
+  /**
+   * Dispara o estágio atual da régua AGORA, ignorando a janela de horário. Serve pra ver
+   * D1/D3/D7 no mesmo dia em vez de esperar uma semana. Manda WhatsApp DE VERDADE e avança
+   * o estado igual ao cron — por isso exige confirmar=1 além do token.
+   */
+  if (action === "regua-disparar") {
+    if (req.nextUrl.searchParams.get("confirmar") !== "1") {
+      return NextResponse.json(
+        { ok: false, error: "isso envia WhatsApp de verdade — repita com &confirmar=1" },
+        { status: 400 }
+      );
+    }
+    const body = await req.json().catch(() => ({}));
+    const { conversationId } = body as { conversationId?: string };
+    if (!conversationId) return NextResponse.json({ ok: false, error: "conversationId é obrigatório" }, { status: 400 });
+
+    const db = createServiceClient();
+    const resultado = await dispararEstagioAgora(db, conversationId);
+    return NextResponse.json({ ok: resultado.enviado, ...resultado });
+  }
+
   if (action !== "test-tool") return NextResponse.json({ ok: false, error: "action desconhecida" }, { status: 400 });
 
   const body = await req.json().catch(() => ({}));
