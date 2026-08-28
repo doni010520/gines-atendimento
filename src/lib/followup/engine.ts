@@ -2,6 +2,7 @@ import { createServiceClient } from "@/lib/supabase/service";
 import { sendText } from "@/lib/whatsapp/uazapi";
 import {
   greetingFor,
+  modoTesteGapMs,
   nextShiftSlot,
   parseShift,
   resolveShift,
@@ -42,6 +43,12 @@ export function scheduleStage(
   if (!STAGE_SHIFT[stage]) return null;
 
   const shift = resolveShift(STAGE_SHIFT[stage], lastShift);
+
+  // modo de teste: o próximo estágio sai daqui a poucos minutos, mantendo a rotação de
+  // turnos (dá pra conferir a alternância mesmo com os dias comprimidos)
+  const gapTeste = modoTesteGapMs();
+  if (gapTeste !== null) return { at: new Date(now.getTime() + gapTeste), shift };
+
   let at = nextShiftSlot(materialSentAt, shift, STAGE_DAY_OFFSET[stage]);
 
   const floor = new Date(now.getTime() + (stage === 1 ? MIN_GAP_AFTER_MATERIAL_MS : 0));
@@ -75,6 +82,14 @@ export async function runFollowupEngine() {
     return { processed: 0, sent: 0 };
   }
   if (!due || due.length === 0) return { processed: 0, sent: 0 };
+
+  const gapTeste = modoTesteGapMs();
+  if (gapTeste !== null) {
+    await logEvent("warn", "followup", "MODO DE TESTE ligado — janela ignorada e estágios comprimidos", {
+      gapMinutos: gapTeste / 60_000,
+      conversas: due.length,
+    });
+  }
 
   let processed = 0;
   let sent = 0;
@@ -154,7 +169,8 @@ async function processOne(db: ReturnType<typeof createServiceClient>, conv: DueC
   const shift = resolveShift(preferido, lastShift);
 
   // fora do turno certo: só reagenda, nunca pula estágio nem manda fora de hora
-  if (!shouldSendNow(now, shift, lastShift)) {
+  // (no modo de teste a janela é ignorada de propósito — é o ponto do modo)
+  if (modoTesteGapMs() === null && !shouldSendNow(now, shift, lastShift)) {
     await db
       .from("conversations")
       .update({ next_followup_at: nextShiftSlot(now, shift, 0).toISOString() })

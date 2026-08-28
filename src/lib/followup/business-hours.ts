@@ -121,6 +121,24 @@ export function shouldSendNow(now: Date, shift: Shift, lastShift: Shift | null):
   return minutesOfDay(toSpWall(now)) > SHIFT_START[shift] + SLOT_LENGTH_MIN;
 }
 
+/**
+ * Modo de teste: comprime D1/D3/D7 em minutos e libera a janela, pra validar a régua
+ * inteira em poucos minutos em vez de uma semana.
+ *
+ * Exige DEBUG=true JUNTO com FOLLOWUP_TEST_GAP_MIN — em produção DEBUG é "false", então
+ * a variável sozinha não faz nada. Sem essa dupla trava, um valor esquecido no ambiente
+ * mandaria as 3 mensagens da régua em minutos, de madrugada, pra cliente real.
+ *
+ * @returns intervalo em ms entre estágios, ou null quando o modo está desligado.
+ */
+export function modoTesteGapMs(): number | null {
+  if (process.env.DEBUG !== "true") return null;
+  const bruto = Number(process.env.FOLLOWUP_TEST_GAP_MIN);
+  if (!Number.isFinite(bruto) || bruto <= 0) return null;
+  const minutos = Math.min(60, Math.max(1, Math.floor(bruto)));
+  return minutos * 60_000;
+}
+
 /** Saudação correta pro horário real do disparo (o slot pode escorregar). */
 export function greetingFor(date: Date): string {
   const m = minutesOfDay(toSpWall(date));

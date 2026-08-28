@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { runFollowupEngine } from "@/lib/followup/engine";
+import { modoTesteGapMs } from "@/lib/followup/business-hours";
 
 export const dynamic = "force-dynamic";
 
@@ -14,5 +15,10 @@ export async function GET(req: NextRequest) {
   }
 
   const result = await runFollowupEngine();
-  return NextResponse.json({ ok: true, ...result });
+  const gapTeste = modoTesteGapMs();
+  return NextResponse.json({
+    ok: true,
+    ...result,
+    ...(gapTeste !== null ? { modo_teste: `estágios a cada ${gapTeste / 60_000} min, janela ignorada` } : {}),
+  });
 }
