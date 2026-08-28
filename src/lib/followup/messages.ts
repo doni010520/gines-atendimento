@@ -75,17 +75,30 @@ function materiais(v: CopyVars) {
   return "no material";
 }
 
+/**
+ * Junta os blocos numa mensagem só, separados por linha em branco.
+ *
+ * O texto é o do Gines, palavra por palavra — o que muda é a respiração. Num parágrafo
+ * único de ~500 caracteres, a mensagem chega como um muro no celular (viu-se no teste real
+ * de 28/08). Continua UMA bolha: quebrar em várias mensagens seria o erro oposto, que ele
+ * já apontou em 15/08.
+ */
+function blocos(...partes: Array<string | false | undefined>): string {
+  return partes
+    .filter((p): p is string => Boolean(p))
+    .map((p) => p.trim())
+    .join("\n\n");
+}
+
 /** D1 — fim de tarde. Recepção do material + facilidade de visitação. */
 export function copyDia1(v: CopyVars): string {
   const g = genero(v.tipo);
   // sem destaque sustentado pela base do imóvel, a frase sai — não se inventa característica
   const destaque = v.destaqueVisual ? `Acredito que ${v.destaqueVisual} chamou sua atenção. ` : "";
-  return (
-    `Olá${vocativo(v.nome)}! Conseguiu dar uma olhada ${materiais(v)} d${g.artigo} ${v.tipo}${localSuffix(v)} que enviei? ` +
-    destaque +
-    `Se ficou alguma dúvida sobre a planta ou as condições de negociação, estou aqui para ajudar. ` +
-    `Nossa operação é super ágil: com apenas 1 hora de antecedência, consigo agendar sua visita para qualquer dia da semana. ` +
-    `O que acha de conhecermos o espaço nos próximos dias?`
+  return blocos(
+    `Olá${vocativo(v.nome)}! Conseguiu dar uma olhada ${materiais(v)} d${g.artigo} ${v.tipo}${localSuffix(v)} que enviei?`,
+    `${destaque}Se ficou alguma dúvida sobre a planta ou as condições de negociação, estou aqui para ajudar.`,
+    `Nossa operação é super ágil: com apenas 1 hora de antecedência, consigo agendar sua visita para qualquer dia da semana. O que acha de conhecermos o espaço nos próximos dias?`
   );
 }
 
@@ -100,19 +113,23 @@ export function copyDia3(v: CopyVars): string {
   if (v.reformado) {
     // aqui o substantivo repetido é do texto original do Gines — vem depois de duas frases,
     // então não soa repetitivo como colado na abertura
-    const tecnico = v.destaqueTecnico ? `Além disso, ${g.artigo} ${v.tipo} já conta com ${v.destaqueTecnico}. ` : "";
-    return (
-      `${abertura} ${g.pronome} foi 100% ${g.reformado} e ${g.modernizado}. ` +
-      `É literalmente receber as chaves e mudar, sem nenhuma dor de cabeça com obras. ` +
-      tecnico +
+    const tecnico = v.destaqueTecnico ? `Além disso, ${g.artigo} ${v.tipo} já conta com ${v.destaqueTecnico}.` : "";
+    return blocos(
+      `${abertura} ${g.pronome} foi 100% ${g.reformado} e ${g.modernizado}.`,
+      `É literalmente receber as chaves e mudar, sem nenhuma dor de cabeça com obras. ${tecnico}`,
       fechamento
     );
   }
   // sem a frase da reforma, o técnico encosta na abertura — usa pronome pra não repetir
   // o substantivo ("desse sobrado: o sobrado já conta com...")
-  if (v.destaqueTecnico) return `${abertura} ${g.pronome} já conta com ${v.destaqueTecnico}. ${fechamento}`;
+  if (v.destaqueTecnico) {
+    return blocos(`${abertura} ${g.pronome} já conta com ${v.destaqueTecnico}.`, fechamento);
+  }
   // nem reforma nem diferencial cadastrado: vira um retorno honesto, sem promessa nenhuma
-  return `${v.saudacao}${vocativo(v.nome)}! Tudo bem? Passando para saber se ficou alguma dúvida sobre ${g.esse} ${v.tipo}. ${fechamento}`;
+  return blocos(
+    `${v.saudacao}${vocativo(v.nome)}! Tudo bem? Passando para saber se ficou alguma dúvida sobre ${g.esse} ${v.tipo}.`,
+    fechamento
+  );
 }
 
 /** D7 — início da tarde. Escassez sutil + despedida que força uma resposta. */
@@ -123,11 +140,10 @@ export function copyDia7(v: CopyVars): string {
       ? `Casas de rua ${g.totalmente} e ${g.prontas} para morar${localSuffix(v)} costumam ter uma liquidez bem alta.`
       : `${g.plural.charAt(0).toUpperCase()}${g.plural.slice(1)} como ${g.esse}${localSuffix(v)} costumam ter uma liquidez bem alta.`;
 
-  return (
-    `Olá${vocativo(v.nome)}. ${abertura} ` +
-    `Como não tivemos retorno, este será meu último contato ativo para não ser inconveniente. ` +
-    `Lembrando que você tem total facilidade para visitar: basta me avisar com 1 horinha de antecedência e ${g.artigo} ${v.tipo} estará ${g.liberado} para você conhecer, no dia que preferir. ` +
-    `Podemos deixar uma visita pré-agendada, ou no momento você pausou as buscas?`
+  return blocos(
+    `Olá${vocativo(v.nome)}. ${abertura}`,
+    `Como não tivemos retorno, este será meu último contato ativo para não ser inconveniente.`,
+    `Lembrando que você tem total facilidade para visitar: basta me avisar com 1 horinha de antecedência e ${g.artigo} ${v.tipo} estará ${g.liberado} para você conhecer, no dia que preferir. Podemos deixar uma visita pré-agendada, ou no momento você pausou as buscas?`
   );
 }
 
