@@ -18,7 +18,7 @@ Agente de IA para WhatsApp (imobiliária GINES) + painel de cadastro de imóveis
 | Instância uazapi conectada ao número do GINES (QR code) | seu provedor de uazapi — mesmo processo que você já fez pro Corrêa/MVF | `UAZAPI_BASE_URL` e `UAZAPI_TOKEN` |
 | ID do grupo/número da equipe pra onde o bot avisa handoff ("passar o bastão") | pegue o `chatid` do grupo (mesma lógica do Corrêa) | `NOTIFY_GROUP_ID` |
 | Configurar o webhook da instância uazapi apontando pra `https://SEU-DOMINIO/api/webhooks/uazapi?token=<WEBHOOK_TOKEN>` | painel/API da uazapi | — |
-| Um cron externo (ex: cron-job.org) batendo em `https://SEU-DOMINIO/api/cron?secret=<CRON_SECRET>` a cada 5 min | cron-job.org (grátis) ou similar | — |
+| ~~Cron externo~~ — **não é mais necessário**: o próprio servidor agenda a régua a cada 5 min (`src/instrumentation.ts`). `/api/cron` continua valendo pra disparo manual. Pra desligar o agendador: `FOLLOWUP_SCHEDULER=off` | — | pronto |
 | Onde hospedar (Docker/EasyPanel como os outros projetos, ou outra opção sua) | — | — |
 | Domínio | — | — |
 

@@ -5,8 +5,9 @@ import { modoTesteGapMs } from "@/lib/followup/business-hours";
 export const dynamic = "force-dynamic";
 
 /**
- * Disparado por um cron externo (ex: cron-job.org) a cada 5 minutos — mesmo padrão usado
- * no Corrêa/MVF. Não há agendador nativo rodando dentro do container.
+ * Disparo manual da régua. O agendamento automático vive em src/instrumentation.ts, dentro
+ * do próprio servidor — este endpoint continua aqui pra forçar uma rodada na mão (e pra um
+ * cron externo, se um dia fizer sentido ter os dois).
  */
 export async function GET(req: NextRequest) {
   const secret = req.nextUrl.searchParams.get("secret");
