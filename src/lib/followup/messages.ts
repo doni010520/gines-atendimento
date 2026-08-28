@@ -54,8 +54,13 @@ function genero(tipo: string) {
   };
 }
 
+/**
+ * Só o primeiro nome — "Olá, Adonias Santos!" (como saiu no teste real de 28/08) soa
+ * cadastro de call center, não alguém falando com você.
+ */
 function vocativo(nome: string | null) {
-  return nome?.trim() ? `, ${nome.trim()}` : "";
+  const primeiro = nome?.trim().split(/\s+/)[0];
+  return primeiro ? `, ${primeiro}` : "";
 }
 
 /** Bairro/cidade só entram na frase quando estão cadastrados. */
