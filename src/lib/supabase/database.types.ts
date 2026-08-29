@@ -300,6 +300,7 @@ export type Database = {
       properties: {
         Row: {
           ad_ref_titles: string[]
+          ad_source_ids: string[]
           address: string | null
           area_built: number | null
           area_land: number | null
@@ -331,6 +332,7 @@ export type Database = {
         }
         Insert: {
           ad_ref_titles?: string[]
+          ad_source_ids?: string[]
           address?: string | null
           area_built?: number | null
           area_land?: number | null
@@ -362,6 +364,7 @@ export type Database = {
         }
         Update: {
           ad_ref_titles?: string[]
+          ad_source_ids?: string[]
           address?: string | null
           area_built?: number | null
           area_land?: number | null
@@ -424,6 +427,7 @@ export type Database = {
         }
         Returns: {
           ad_ref_titles: string[]
+          ad_source_ids: string[]
           address: string | null
           area_built: number | null
           area_land: number | null

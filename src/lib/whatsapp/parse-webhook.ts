@@ -24,8 +24,19 @@ export type AdReferralGuess = {
   body?: string;
   thumbnailUrl?: string;
   sourceUrl?: string;
+  /** id do anúncio — estável, não muda se o texto do anúncio for editado */
   sourceId?: string;
   mediaType?: string;
+  /** instagram | facebook */
+  sourceApp?: string;
+  /** "ad" quando é anúncio pago */
+  sourceType?: string;
+  /** ctwa_ad = anúncio | click_to_chat_link = link wa.me comum */
+  entryPointConversionSource?: string;
+  /** FB_Ads */
+  conversionSource?: string;
+  /** id único do clique, serve pra atribuição */
+  ctwaClid?: string;
 };
 
 function digObject(obj: unknown): Record<string, unknown> | undefined {
@@ -41,38 +52,65 @@ function digObject(obj: unknown): Record<string, unknown> | undefined {
   return undefined;
 }
 
+/** Aceita string ou número — mediaType vem como número, sourceID como string. */
+function texto(v: unknown): string | undefined {
+  if (typeof v === "string" && v.trim()) return v;
+  if (typeof v === "number") return String(v);
+  return undefined;
+}
+
 /**
- * Procura contextInfo.externalAdReplyInfo em qualquer profundidade razoável do content bruto.
- * uazapi (Baileys por baixo) tende a repassar o objeto de protocolo original em `content`;
- * a forma exata (extendedTextMessage / imageMessage / etc.) varia conforme o tipo de mensagem
- * que a pessoa clicou no anúncio — por isso a busca é recursiva e defensiva.
- * NÃO CONFIRMADO em produção ainda: validar com uma mensagem real antes de confiar 100% nisso.
+ * Acha o nó que carrega os dados do anúncio e devolve ele junto do pai (contextInfo) —
+ * porque metade da informação fica em cada um: `externalAdReply` traz título/id/URL do
+ * anúncio, e o `contextInfo` em volta traz de onde veio o clique (conversionSource,
+ * entryPointConversionSource).
  */
-function findExternalAdReply(node: unknown, depth = 0): AdReferralGuess | undefined {
-  if (depth > 6 || !node || typeof node !== "object") return undefined;
+function acharContextoAnuncio(
+  node: unknown,
+  depth = 0
+): { anuncio: Record<string, unknown>; contexto: Record<string, unknown> } | undefined {
+  if (depth > 8 || !node || typeof node !== "object") return undefined;
   const obj = node as Record<string, unknown>;
 
-  const direct = obj["externalAdReplyInfo"] ?? obj["externalAdReply"] ?? obj["ctwaContext"];
-  if (direct && typeof direct === "object") {
-    const d = direct as Record<string, unknown>;
-    return {
-      title: typeof d.title === "string" ? d.title : undefined,
-      body: typeof d.body === "string" ? d.body : undefined,
-      thumbnailUrl:
-        (typeof d.thumbnailUrl === "string" && d.thumbnailUrl) ||
-        (typeof d.thumbnail === "string" && d.thumbnail) ||
-        undefined,
-      sourceUrl: typeof d.sourceUrl === "string" ? d.sourceUrl : undefined,
-      sourceId: typeof d.sourceId === "string" ? d.sourceId : undefined,
-      mediaType: typeof d.mediaType === "string" ? d.mediaType : undefined,
-    };
+  const anuncio = obj["externalAdReplyInfo"] ?? obj["externalAdReply"] ?? obj["ctwaContext"];
+  if (anuncio && typeof anuncio === "object") {
+    return { anuncio: anuncio as Record<string, unknown>, contexto: obj };
   }
 
   for (const key of Object.keys(obj)) {
-    const found = findExternalAdReply(obj[key], depth + 1);
+    const found = acharContextoAnuncio(obj[key], depth + 1);
     if (found) return found;
   }
   return undefined;
+}
+
+/**
+ * Monta o referral a partir do payload real da Meta.
+ *
+ * CONFIRMADO com tráfego real em 29/08/26 (anúncio de Instagram do sobrado do Brooklin):
+ * as chaves vêm como `sourceID`, `sourceURL` e `thumbnailURL` — com ID/URL em maiúsculo.
+ * A versão anterior procurava `sourceId`/`sourceUrl` e perdia justamente o identificador
+ * do anúncio, que é o casamento confiável com o imóvel. As duas grafias são aceitas.
+ */
+function findExternalAdReply(node: unknown): AdReferralGuess | undefined {
+  const achado = acharContextoAnuncio(node);
+  if (!achado) return undefined;
+  const { anuncio: d, contexto: ctx } = achado;
+
+  return {
+    title: texto(d.title),
+    body: texto(d.body),
+    // `thumbnail` é base64 e não serve como URL — só entra se vier URL de verdade
+    thumbnailUrl: texto(d.thumbnailURL) ?? texto(d.thumbnailUrl),
+    sourceUrl: texto(d.sourceURL) ?? texto(d.sourceUrl),
+    sourceId: texto(d.sourceID) ?? texto(d.sourceId),
+    mediaType: texto(d.mediaType),
+    sourceApp: texto(d.sourceApp) ?? texto(ctx.entryPointConversionApp),
+    sourceType: texto(d.sourceType),
+    entryPointConversionSource: texto(ctx.entryPointConversionSource),
+    conversionSource: texto(ctx.conversionSource),
+    ctwaClid: texto(d.ctwaClid) ?? texto(ctx.ctwaClid) ?? texto(ctx.ctwa_clid),
+  };
 }
 
 function extractText(content: Record<string, unknown> | undefined, fallback: string): string {

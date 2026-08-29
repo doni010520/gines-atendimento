@@ -2,6 +2,7 @@ import { createServiceClient } from "@/lib/supabase/service";
 import { parseUazapiMessage, type ParsedInboundMessage } from "./parse-webhook";
 import { scheduleDebounced } from "./debounce";
 import { runAgentTurn } from "@/lib/ai/agent";
+import { casarImovelPorAnuncio } from "./match-property";
 import { logEvent } from "@/lib/log";
 import { sendText, downloadAndTranscribeAudio } from "./uazapi";
 
@@ -149,6 +150,25 @@ export async function handleInboundMessage(rawMessage: Record<string, unknown>) 
   // 1ª mensagem da conversa: tenta casar com o anúncio clicado
   if (!conversation.property_id && parsed.adReferral) {
     await db.from("ad_referrals").insert({ conversation_id: conversation.id, raw: parsed.raw as never });
+
+    // acertar o imóvel aqui muda a conversa inteira: o prompt já sabe não perguntar
+    // "qual imóvel?" quando o sistema identificou pelo anúncio
+    const propertyId = await casarImovelPorAnuncio(db, parsed.adReferral).catch((err) => {
+      logEvent("error", "ad-match", "falha ao casar anúncio com imóvel", {
+        error: err instanceof Error ? err.message : String(err),
+      });
+      return null;
+    });
+
+    if (propertyId) {
+      await db.from("conversations").update({ property_id: propertyId }).eq("id", conversation.id);
+      await logEvent("info", "ad-match", "imóvel identificado pelo anúncio", {
+        conversationId: conversation.id,
+        propertyId,
+        origem: parsed.adReferral.entryPointConversionSource ?? "?",
+        app: parsed.adReferral.sourceApp ?? "?",
+      });
+    }
   }
 
   if (isStale) return;

@@ -10,6 +10,8 @@ import {
   type PropertyForCopy,
 } from "@/lib/followup/engine";
 import { copyOptOut, MENSAGEM_HANDOFF } from "@/lib/followup/messages";
+import { parseUazapiMessage } from "@/lib/whatsapp/parse-webhook";
+import { casarImovelPorAnuncio } from "@/lib/whatsapp/match-property";
 import { SHIFT_LABEL, type Shift } from "@/lib/followup/business-hours";
 
 export const dynamic = "force-dynamic";
@@ -23,6 +25,7 @@ export const dynamic = "force-dynamic";
  *   GET /api/debug?token=...&action=regua-preview[&propertyId=...&nome=Ricardo]
  *   POST /api/debug?token=...&action=test-tool  body: { conversationId, name, args }
  *   POST /api/debug?token=...&action=regua-disparar&confirmar=1  body: { conversationId }
+ *   POST /api/debug?token=...&action=ad-match  body: <payload cru da uazapi>
  */
 function isAuthorized(req: NextRequest) {
   if (process.env.DEBUG !== "true") return false;
@@ -158,6 +161,37 @@ export async function POST(req: NextRequest) {
     const db = createServiceClient();
     const resultado = await dispararEstagioAgora(db, conversationId);
     return NextResponse.json({ ok: resultado.enviado, ...resultado });
+  }
+
+  /**
+   * Passa um payload cru pelo parser e pelo casamento anúncio->imóvel, sem criar contato,
+   * conversa nem mandar mensagem. Serve pra conferir um anúncio novo antes de confiar nele.
+   * Efeito colateral proposital: se casar por título, o id do anúncio fica aprendido.
+   */
+  if (action === "ad-match") {
+    const bruto = await req.json().catch(() => null);
+    if (!bruto) return NextResponse.json({ ok: false, error: "mande o payload cru no corpo" }, { status: 400 });
+
+    const mensagem = (bruto as Record<string, unknown>).message ?? bruto;
+    const parsed = parseUazapiMessage(mensagem as Record<string, unknown>);
+    if (!parsed.adReferral) {
+      return NextResponse.json({ ok: true, temAnuncio: false, aviso: "nenhum dado de anúncio nesse payload" });
+    }
+
+    const db = createServiceClient();
+    const propertyId = await casarImovelPorAnuncio(db, parsed.adReferral);
+    const { data: imovel } = propertyId
+      ? await db.from("properties").select("id,title,ad_source_ids").eq("id", propertyId).maybeSingle()
+      : { data: null };
+
+    return NextResponse.json({
+      ok: true,
+      temAnuncio: true,
+      de: parsed.phone,
+      texto: parsed.text,
+      referral: parsed.adReferral,
+      imovel_identificado: imovel ?? "(nenhum — o bot perguntaria normalmente)",
+    });
   }
 
   if (action !== "test-tool") return NextResponse.json({ ok: false, error: "action desconhecida" }, { status: 400 });
