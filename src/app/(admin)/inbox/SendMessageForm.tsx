@@ -3,6 +3,8 @@
 import { useRef } from "react";
 import { useFormStatus } from "react-dom";
 import { sendMessageFormAction } from "./actions";
+import { buttonClass } from "@/components/ui/button";
+import { IconSend } from "@/components/icons";
 
 function SubmitButton() {
   const { pending } = useFormStatus();
@@ -10,9 +12,10 @@ function SubmitButton() {
     <button
       type="submit"
       disabled={pending}
-      className="min-h-11 min-w-20 rounded bg-neutral-900 px-4 text-sm font-medium text-white disabled:opacity-50"
+      aria-label="Enviar mensagem"
+      className={buttonClass({ className: "min-w-12 px-3" })}
     >
-      {pending ? "..." : "Enviar"}
+      {pending ? "..." : <IconSend className="h-4 w-4" />}
     </button>
   );
 }
@@ -30,12 +33,12 @@ export function SendMessageForm({ conversationId }: { conversationId: string }) 
   }
 
   return (
-    <form ref={formRef} action={action} className="flex gap-2 border-t p-3">
+    <form ref={formRef} action={action} className="flex gap-2 border-t border-border p-3">
       <input
         name="text"
         placeholder="Escrever mensagem..."
-        className="min-h-11 flex-1 rounded border px-3 text-sm"
         autoComplete="off"
+        className="min-h-11 flex-1 rounded-lg border border-border bg-surface-muted px-3 text-sm text-ink transition-colors placeholder:text-ink-subtle hover:border-border-strong focus:border-primary focus:bg-surface"
       />
       <SubmitButton />
     </form>

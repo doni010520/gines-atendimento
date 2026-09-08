@@ -1,11 +1,16 @@
 import Link from "next/link";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
+import { Badge } from "@/components/ui/badge";
+import { GroupHeader, PageHeader } from "@/components/ui/card";
+import { conversationStatus, INBOX_GROUPS } from "@/lib/ui/status";
+import { quando } from "@/lib/ui/format";
 
-const STATUS_LABEL: Record<string, { label: string; className: string }> = {
-  bot: { label: "Com o robô", className: "bg-blue-50 text-blue-700" },
-  queued: { label: "Aguardando corretor", className: "bg-amber-50 text-amber-700" },
-  open: { label: "Em atendimento", className: "bg-green-50 text-green-700" },
-  closed: { label: "Encerrado", className: "bg-neutral-100 text-neutral-500" },
+type Conversa = {
+  id: string;
+  status: string;
+  last_message_at: string | null;
+  contact: { name: string | null; phone: string } | null;
+  property: { title: string } | null;
 };
 
 export default async function InboxPage() {
@@ -16,80 +21,89 @@ export default async function InboxPage() {
     .order("last_message_at", { ascending: false })
     .limit(100);
 
-  const list = conversations ?? [];
+  const list: Conversa[] = conversations ?? [];
+
+  // Agrupamento é client-side sobre os mesmos dados: a query não muda, e a ordem
+  // cronológica se mantém dentro de cada grupo.
+  const grupos = INBOX_GROUPS.map((g) => ({
+    ...g,
+    itens: list.filter((c) => (g.statuses as readonly string[]).includes(c.status)),
+  }));
+
+  const esperando = grupos[0].itens.length;
 
   return (
-    <div className="space-y-4">
-      <h1 className="text-xl font-semibold">Inbox</h1>
+    <div className="space-y-7">
+      <PageHeader
+        title="Inbox"
+        hint={
+          esperando > 0
+            ? `${esperando} ${esperando === 1 ? "pessoa espera" : "pessoas esperam"} um corretor.`
+            : "Nenhuma conversa esperando por você."
+        }
+      />
 
-      {/* Mobile: lista de cards, cada um totalmente clicável */}
-      <div className="space-y-2 md:hidden">
-        {list.map((c) => {
-          const status = STATUS_LABEL[c.status] ?? STATUS_LABEL.bot;
-          return (
-            <Link
-              key={c.id}
-              href={`/inbox/${c.id}`}
-              className="flex min-h-16 flex-col justify-center rounded-xl border bg-white px-4 py-3"
-            >
-              <div className="flex items-center justify-between gap-2">
-                <span className="font-medium">{c.contact?.name ?? c.contact?.phone ?? "—"}</span>
-                <span className={`shrink-0 rounded-full px-2 py-1 text-xs ${status.className}`}>{status.label}</span>
-              </div>
-              <div className="mt-1 flex items-center justify-between text-xs text-neutral-500">
-                <span>{c.property?.title ?? c.contact?.phone ?? "—"}</span>
-                <span>{c.last_message_at ? new Date(c.last_message_at).toLocaleString("pt-BR") : "—"}</span>
-              </div>
-            </Link>
-          );
-        })}
-        {list.length === 0 && (
-          <p className="rounded-xl border bg-white px-4 py-8 text-center text-neutral-400">Nenhuma conversa ainda.</p>
-        )}
-      </div>
+      {grupos.map((grupo) => {
+        if (grupo.itens.length === 0 && !grupo.empty) return null;
+        const urgente = grupo.key === "urgente";
 
-      {/* Desktop: tabela */}
-      <div className="hidden overflow-hidden rounded-xl border bg-white md:block">
-        <table className="w-full text-sm">
-          <thead className="bg-neutral-50 text-left text-neutral-500">
-            <tr>
-              <th className="px-4 py-2">Contato</th>
-              <th className="px-4 py-2">Imóvel</th>
-              <th className="px-4 py-2">Status</th>
-              <th className="px-4 py-2">Última mensagem</th>
-            </tr>
-          </thead>
-          <tbody>
-            {list.map((c) => {
-              const status = STATUS_LABEL[c.status] ?? STATUS_LABEL.bot;
-              return (
-                <tr key={c.id} className="border-t hover:bg-neutral-50">
-                  <td className="px-4 py-2">
-                    <Link href={`/inbox/${c.id}`} className="font-medium hover:underline">
-                      {c.contact?.name ?? c.contact?.phone ?? "—"}
-                    </Link>
-                    <div className="text-xs text-neutral-400">{c.contact?.phone}</div>
-                  </td>
-                  <td className="px-4 py-2">{c.property?.title ?? "—"}</td>
-                  <td className="px-4 py-2">
-                    <span className={`rounded-full px-2 py-1 text-xs ${status.className}`}>{status.label}</span>
-                  </td>
-                  <td className="px-4 py-2 text-neutral-500">
-                    {c.last_message_at ? new Date(c.last_message_at).toLocaleString("pt-BR") : "—"}
-                  </td>
-                </tr>
-              );
-            })}
-            {list.length === 0 && (
-              <tr>
-                <td colSpan={4} className="px-4 py-8 text-center text-neutral-400">
-                  Nenhuma conversa ainda.
-                </td>
-              </tr>
+        return (
+          <section key={grupo.key}>
+            <GroupHeader title={grupo.title} count={grupo.itens.length} />
+
+            {grupo.itens.length === 0 ? (
+              <p className="rounded-xl border border-dashed border-border px-4 py-7 text-center text-sm text-ink-subtle">
+                {grupo.empty}
+              </p>
+            ) : (
+              <ul className="space-y-2">
+                {grupo.itens.map((c) => {
+                  const status = conversationStatus(c.status);
+                  return (
+                    <li key={c.id}>
+                      <Link
+                        href={`/inbox/${c.id}`}
+                        className={`flex min-h-16 flex-col justify-center gap-1 rounded-xl border border-border bg-surface px-4 py-3 shadow-card transition-colors hover:border-border-strong hover:bg-surface-muted ${
+                          urgente ? "border-l-[3px] border-l-warn-edge" : ""
+                        }`}
+                      >
+                        <div className="flex items-center justify-between gap-2">
+                          <span className="truncate font-semibold text-ink">
+                            {c.contact?.name ?? c.contact?.phone ?? "—"}
+                          </span>
+                          <Badge tone={status.tone}>{status.label}</Badge>
+                        </div>
+                        <div className="flex items-center justify-between gap-3 text-xs">
+                          <span className="flex min-w-0 items-center gap-2 text-ink-muted">
+                            <span className="truncate">{c.property?.title ?? "Imóvel não identificado"}</span>
+                            {c.contact?.phone && (
+                              <>
+                                <span className="text-border-strong">·</span>
+                                <span className="tabular hidden shrink-0 text-ink-subtle sm:inline">
+                                  {c.contact.phone}
+                                </span>
+                              </>
+                            )}
+                          </span>
+                          <span className="tabular shrink-0 text-ink-subtle">
+                            {quando(c.last_message_at)}
+                          </span>
+                        </div>
+                      </Link>
+                    </li>
+                  );
+                })}
+              </ul>
             )}
-          </tbody>
-        </table>
-      </div>
+          </section>
+        );
+      })}
+
+      {list.length === 0 && (
+        <p className="rounded-xl border border-dashed border-border px-4 py-12 text-center text-sm text-ink-subtle">
+          Nenhuma conversa ainda. Assim que alguém escrever no WhatsApp, ela aparece aqui.
+        </p>
+      )}
     </div>
   );
 }

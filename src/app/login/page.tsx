@@ -1,5 +1,6 @@
 import { redirect } from "next/navigation";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
+import { FormSubmitButton } from "../(admin)/FormSubmitButton";
 
 async function login(formData: FormData) {
   "use server";
@@ -13,29 +14,61 @@ async function login(formData: FormData) {
   redirect("/inbox");
 }
 
+const CAMPO =
+  "min-h-11 w-full rounded-lg border border-border bg-surface-muted px-3 text-sm text-ink " +
+  "transition-colors hover:border-border-strong focus:border-primary focus:bg-surface";
+
 export default async function LoginPage({
   searchParams,
 }: {
   searchParams: Promise<{ error?: string }>;
 }) {
   const { error } = await searchParams;
+
   return (
-    <div className="flex min-h-screen items-center justify-center bg-neutral-50 px-4">
-      <form action={login} className="w-full max-w-sm space-y-4 rounded-xl border bg-white p-6 shadow-sm">
-        <h1 className="text-lg font-semibold">GINES Atendimento</h1>
-        {error && <p className="rounded bg-red-50 p-2 text-sm text-red-700">{error}</p>}
-        <div className="space-y-1">
-          <label className="text-sm font-medium">E-mail</label>
-          <input name="email" type="email" required className="w-full rounded border px-3 py-2 text-sm" />
+    <div className="flex min-h-screen items-center justify-center bg-canvas px-4 py-10">
+      <div className="w-full max-w-sm">
+        <div className="mb-6 text-center">
+          <p className="text-2xl font-bold tracking-tight text-primary">GINES</p>
+          <p className="mt-1 text-sm text-ink-muted">Painel de atendimento</p>
         </div>
-        <div className="space-y-1">
-          <label className="text-sm font-medium">Senha</label>
-          <input name="password" type="password" required className="w-full rounded border px-3 py-2 text-sm" />
-        </div>
-        <button type="submit" className="w-full rounded bg-neutral-900 py-2 text-sm font-medium text-white">
-          Entrar
-        </button>
-      </form>
+
+        <form
+          action={login}
+          className="space-y-4 rounded-xl border border-border bg-surface p-6 shadow-float"
+        >
+          {error && (
+            <p className="rounded-lg border border-danger-edge bg-danger-soft px-3 py-2 text-sm text-danger-ink">
+              {error}
+            </p>
+          )}
+
+          <div className="space-y-1.5">
+            <label htmlFor="email" className="block text-xs font-semibold text-ink-muted">
+              E-mail
+            </label>
+            <input id="email" name="email" type="email" required autoComplete="email" className={CAMPO} />
+          </div>
+
+          <div className="space-y-1.5">
+            <label htmlFor="password" className="block text-xs font-semibold text-ink-muted">
+              Senha
+            </label>
+            <input
+              id="password"
+              name="password"
+              type="password"
+              required
+              autoComplete="current-password"
+              className={CAMPO}
+            />
+          </div>
+
+          <FormSubmitButton pendingLabel="Entrando..." block>
+            Entrar
+          </FormSubmitButton>
+        </form>
+      </div>
     </div>
   );
 }

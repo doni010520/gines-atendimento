@@ -2,21 +2,25 @@
 
 import { useTransition } from "react";
 import { resetConversation } from "./actions";
+import { Button } from "@/components/ui/button";
+import { IconTrash } from "@/components/icons";
 
 export function ResetButton({ conversationId }: { conversationId: string }) {
   const [pending, startTransition] = useTransition();
 
   return (
-    <button
+    <Button
       type="button"
+      variant="danger"
+      block
       disabled={pending}
       onClick={() => {
         if (!confirm("Zerar essa conversa? Apaga mensagens, conversa e contato — não dá pra desfazer.")) return;
         startTransition(() => resetConversation(conversationId));
       }}
-      className="w-full rounded border border-red-200 px-4 py-2 text-sm font-medium text-red-600 hover:bg-red-50 disabled:opacity-50"
     >
-      {pending ? "Zerando..." : "🗑 Zerar conversa (teste)"}
-    </button>
+      <IconTrash className="h-4 w-4" />
+      {pending ? "Zerando..." : "Zerar conversa (teste)"}
+    </Button>
   );
 }

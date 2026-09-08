@@ -1,27 +1,92 @@
 @import "tailwindcss";
 
 /*
- * Painel construído só no tema claro (fundo branco, texto escuro explícito nos
- * componentes) — sem suporte a dark mode ainda. Removido de propósito o
+ * Painel construído só no tema claro — sem dark mode ainda. Removido de propósito o
  * @media (prefers-color-scheme: dark) padrão do create-next-app: ele trocava a cor
  * do texto do body pra quase-branco no modo escuro do sistema, e como nem todo
  * elemento define cor própria (herda do body), ficava texto quase-branco em cima
  * de fundo branco — ilegível. Fixo em claro até termos dark mode de verdade.
+ *
+ * Direção visual: "confiança sóbria" — azul-marinho institucional, cinza-azulado
+ * frio, dourado discreto pro que urge. Ver docs/superpowers/specs/2026-09-07-*.
  */
-:root {
-  --background: #ffffff;
-  --foreground: #171717;
+
+@theme {
+  /* Neutros */
+  --color-canvas: #f7f8fa;
+  --color-surface: #ffffff;
+  --color-surface-muted: #fbfcfd;
+  --color-border: #e3e7ed;
+  --color-border-strong: #cfd6e0;
+  --color-ink: #16202e;
+  --color-ink-muted: #64748b;
+  --color-ink-subtle: #94a3b8;
+
+  /* Marca */
+  --color-primary: #1b3a5c;
+  --color-primary-hover: #16304c;
+  --color-primary-soft: #e8eef6;
+  --color-primary-ink: #2c4e77;
+
+  /* Estados: par soft/ink por tom */
+  --color-warn-soft: #fbf2e0;
+  --color-warn-ink: #8a5f14;
+  --color-warn-edge: #b4802a;
+
+  --color-ok-soft: #e4efe8;
+  --color-ok-ink: #2a5c3f;
+
+  --color-mute-soft: #eef1f5;
+
+  --color-danger-soft: #fef3f2;
+  --color-danger-ink: #b42318;
+  --color-danger-edge: #f2c9c5;
+
+  /* Elevação — sombra sempre com o azul do texto, nunca preto puro */
+  --shadow-card: 0 1px 2px rgba(22, 32, 46, 0.05);
+  --shadow-float: 0 4px 12px rgba(22, 32, 46, 0.08);
+  --shadow-bar: 0 -2px 10px rgba(22, 32, 46, 0.05);
 }
 
 @theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+  /* Precisa ser inline: as vars vêm do next/font, aplicadas no <html> */
+  --font-sans: var(--font-geist-sans), ui-sans-serif, system-ui, sans-serif;
+  --font-mono: var(--font-geist-mono), ui-monospace, monospace;
 }
 
-body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+@layer base {
+  /*
+   * O Tailwind 4 mudou o padrão do preflight pra `border: 0 solid` — sem cor, o
+   * que faz toda classe `border` cair em currentColor (aqui, quase preto). Era a
+   * causa das bordas pretas em todo card, input e tabela do painel. Isto devolve
+   * o comportamento do v3: borda sem cor explícita usa a cor de borda do tema.
+   */
+  *,
+  ::after,
+  ::before,
+  ::backdrop,
+  ::file-selector-button {
+    border-color: var(--color-border);
+  }
+
+  body {
+    background: var(--color-canvas);
+    color: var(--color-ink);
+    font-family: var(--font-sans);
+    -webkit-font-smoothing: antialiased;
+  }
+
+  /* Foco visível e consistente — não existia nenhum estado de foco no painel */
+  :focus-visible {
+    outline: 2px solid var(--color-primary);
+    outline-offset: 2px;
+    border-radius: 2px;
+  }
+
+  /* Números alinham em coluna: preço, hora, telefone */
+  .tabular {
+    font-family: var(--font-mono);
+    font-variant-numeric: tabular-nums;
+    letter-spacing: -0.01em;
+  }
 }
