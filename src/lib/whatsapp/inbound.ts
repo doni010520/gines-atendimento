@@ -96,6 +96,15 @@ export async function handleInboundMessage(rawMessage: Record<string, unknown>) 
   if (parsed.isGroup) return; // grupos não entram no atendimento
   if (!parsed.phone) return;
 
+  // Filtro de whitelist: se ALLOWED_NUMBERS estiver definido, ignora números fora da lista
+  const allowedNumbersStr = process.env.ALLOWED_NUMBERS;
+  if (allowedNumbersStr) {
+    const allowedNumbers = allowedNumbersStr.split(",").map((s) => s.trim());
+    if (allowedNumbers.length > 0 && !allowedNumbers.includes(parsed.phone)) {
+      return;
+    }
+  }
+
   if (!parsed.fromMe && RESET_COMMAND_RE.test(parsed.text.trim())) {
     await resetConversationByPhone(db, parsed.phone);
     return;

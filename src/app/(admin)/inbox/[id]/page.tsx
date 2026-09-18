@@ -95,19 +95,17 @@ export default async function ConversationPage({ params }: { params: Promise<{ i
             {lista.map((m) => (
               <div
                 key={m.id}
-                className={`w-fit max-w-[85%] px-3 py-2 text-sm sm:max-w-[72%] ${
-                  m.is_internal
+                className={`w-fit max-w-[85%] px-3 py-2 text-sm sm:max-w-[72%] ${m.is_internal
                     ? "mx-auto rounded-lg bg-warn-soft text-warn-ink"
                     : m.direction === "in"
                       ? "rounded-xl rounded-bl-sm border border-border bg-surface text-ink"
                       : "ml-auto rounded-xl rounded-br-sm bg-primary text-white"
-                }`}
+                  }`}
               >
                 <p className="whitespace-pre-wrap break-words">{m.body}</p>
                 <p
-                  className={`tabular mt-1 text-[10px] ${
-                    m.direction === "out" && !m.is_internal ? "text-white/60" : "text-ink-subtle"
-                  }`}
+                  className={`tabular mt-1 text-[10px] ${m.direction === "out" && !m.is_internal ? "text-white/60" : "text-ink-subtle"
+                    }`}
                 >
                   {dataHora(m.created_at)}
                 </p>
@@ -150,13 +148,23 @@ export default async function ConversationPage({ params }: { params: Promise<{ i
             )}
           </Card>
 
-          {conversation.status === "open" && (
-            <form action={returnToBot.bind(null, id)}>
-              <FormSubmitButton pendingLabel="Devolvendo..." variant="secondary" block>
-                Devolver pro robô
+          <Card className="p-4 space-y-3">
+            <div className="flex items-center justify-between">
+              <span className="text-sm font-semibold text-ink">Estado da IA</span>
+              <Badge tone={conversation.ai_enabled ? "success" : "neutral"}>
+                {conversation.ai_enabled ? "Rodando" : "Pausada"}
+              </Badge>
+            </div>
+            <form action={conversation.ai_enabled ? assumeConversation.bind(null, id) : returnToBot.bind(null, id)}>
+              <FormSubmitButton
+                pendingLabel="Alterando..."
+                variant={conversation.ai_enabled ? "secondary" : "default"}
+                block
+              >
+                {conversation.ai_enabled ? "Pausar IA (Assumir Manualmente)" : "Reativar IA (Robô atende)"}
               </FormSubmitButton>
             </form>
-          )}
+          </Card>
 
           <ResetButton conversationId={id} />
         </aside>
