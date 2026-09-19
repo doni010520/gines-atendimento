@@ -96,10 +96,10 @@ export default async function ConversationPage({ params }: { params: Promise<{ i
               <div
                 key={m.id}
                 className={`w-fit max-w-[85%] px-3 py-2 text-sm sm:max-w-[72%] ${m.is_internal
-                    ? "mx-auto rounded-lg bg-warn-soft text-warn-ink"
-                    : m.direction === "in"
-                      ? "rounded-xl rounded-bl-sm border border-border bg-surface text-ink"
-                      : "ml-auto rounded-xl rounded-br-sm bg-primary text-white"
+                  ? "mx-auto rounded-lg bg-warn-soft text-warn-ink"
+                  : m.direction === "in"
+                    ? "rounded-xl rounded-bl-sm border border-border bg-surface text-ink"
+                    : "ml-auto rounded-xl rounded-br-sm bg-primary text-white"
                   }`}
               >
                 <p className="whitespace-pre-wrap break-words">{m.body}</p>
@@ -151,14 +151,14 @@ export default async function ConversationPage({ params }: { params: Promise<{ i
           <Card className="p-4 space-y-3">
             <div className="flex items-center justify-between">
               <span className="text-sm font-semibold text-ink">Estado da IA</span>
-              <Badge tone={conversation.ai_enabled ? "success" : "neutral"}>
+              <Badge tone={conversation.ai_enabled ? "ok" : "mute"}>
                 {conversation.ai_enabled ? "Rodando" : "Pausada"}
               </Badge>
             </div>
             <form action={conversation.ai_enabled ? assumeConversation.bind(null, id) : returnToBot.bind(null, id)}>
               <FormSubmitButton
                 pendingLabel="Alterando..."
-                variant={conversation.ai_enabled ? "secondary" : "default"}
+                variant={conversation.ai_enabled ? "secondary" : "primary"}
                 block
               >
                 {conversation.ai_enabled ? "Pausar IA (Assumir Manualmente)" : "Reativar IA (Robô atende)"}
