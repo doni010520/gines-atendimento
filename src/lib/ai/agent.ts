@@ -6,11 +6,12 @@ import { TOOLS } from "./tools";
 import { executeTool, type ToolContext } from "./tools-exec";
 import { sendText } from "@/lib/whatsapp/uazapi";
 import { logEvent } from "@/lib/log";
+import { MODEL, openaiClient } from "./openai";
+import { iniciarCadencia } from "@/lib/followup/engine";
 
 const MAX_ITERATIONS = 6;
 const LOCK_MS = 2 * 60 * 1000;
 const HISTORY_LIMIT = 30;
-const MODEL = process.env.OPENAI_MODEL || "gpt-4.1-mini";
 
 // bot diz que vai fazer algo sem ter chamado a tool correspondente nesse turno.
 // Achado em teste real (13/08/26): "já vou registrar" (nome) não era coberto — o modelo
@@ -21,12 +22,6 @@ const PROMISE_RE = new RegExp(
   `\\b(já? ?vou (${PROMISE_VERBS})|já te (passo|chamo|confirmo|encaminho|transfiro)|deixa eu (${PROMISE_VERBS}))\\b`,
   "i"
 );
-
-function openaiClient() {
-  const apiKey = process.env.OPENAI_API_KEY;
-  if (!apiKey) throw new Error("OPENAI_API_KEY não configurada");
-  return new OpenAI({ apiKey });
-}
 
 async function acquireLock(db: ReturnType<typeof createServiceClient>, conversationId: string): Promise<boolean> {
   const nowIso = new Date().toISOString();
@@ -84,7 +79,9 @@ export async function runAgentTurn(conversationId: string) {
 
   const { data: conversation } = await db.from("conversations").select("*").eq("id", conversationId).single();
   if (!conversation) return;
-  if (!conversation.ai_enabled) return;
+  // só o robô fala em conversa dele: transferida pra humano (queued), aberta ou fechada,
+  // o bot fica quieto mesmo que ai_enabled tenha ficado ligado
+  if (conversation.status !== "bot" || !conversation.ai_enabled) return;
 
   const locked = await acquireLock(db, conversationId);
   if (!locked) return; // já tem um turno rodando pra essa conversa
@@ -206,6 +203,7 @@ export async function runAgentTurn(conversationId: string) {
       finalText = retryCompletion.choices[0].message.content ?? finalText;
     }
 
+    let enviouAlgo = false;
     if (finalText) {
       const parts = splitForWhatsapp(finalText);
       for (const part of parts) {
@@ -216,7 +214,14 @@ export async function runAgentTurn(conversationId: string) {
           })
         );
         await db.from("messages").insert({ conversation_id: conversationId, direction: "out", body: part });
+        enviouAlgo = true;
       }
+    }
+
+    // robô falou e o lead ainda não respondeu: a cadência (re)começa do toque 1 ancorada
+    // nesta mensagem. Material enviado por tool também conta como fala do robô.
+    if ((enviouAlgo || toolCtx.materialSentAt !== conversation.material_sent_at) && !atendimentoFinalizado) {
+      await iniciarCadencia(db, conversationId, new Date());
     }
   } catch (err) {
     await logEvent("error", "agent", "falha no turno do agente", {

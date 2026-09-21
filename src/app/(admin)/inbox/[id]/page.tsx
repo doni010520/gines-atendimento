@@ -70,7 +70,14 @@ export default async function ConversationPage({ params }: { params: Promise<{ i
                 )}
               </p>
             </div>
-            <Badge tone={status.tone}>{status.label}</Badge>
+            <div className="flex shrink-0 flex-wrap items-center justify-end gap-1.5">
+              {(conversation.tags ?? []).map((tag) => (
+                <Badge key={tag} tone="warn">
+                  {tag}
+                </Badge>
+              ))}
+              <Badge tone={status.tone}>{status.label}</Badge>
+            </div>
           </header>
 
           {/*

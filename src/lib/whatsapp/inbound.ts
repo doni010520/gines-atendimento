@@ -5,6 +5,7 @@ import { runAgentTurn } from "@/lib/ai/agent";
 import { casarImovelPorAnuncio } from "./match-property";
 import { logEvent } from "@/lib/log";
 import { sendText, downloadAndTranscribeAudio } from "./uazapi";
+import { pararCadencia } from "@/lib/followup/engine";
 
 const STALE_MS = Number(process.env.BOT_STALE_MS ?? 5 * 60 * 1000);
 
@@ -156,6 +157,9 @@ export async function handleInboundMessage(rawMessage: Record<string, unknown>) 
     .update({ last_message_at: new Date().toISOString() })
     .eq("id", conversation.id);
 
+  // lead respondeu: a cadência de follow-up para; recomeça quando o robô falar de novo
+  await pararCadencia(db, conversation.id);
+
   // 1ª mensagem da conversa: tenta casar com o anúncio clicado
   if (!conversation.property_id && parsed.adReferral) {
     await db.from("ad_referrals").insert({ conversation_id: conversation.id, raw: parsed.raw as never });
@@ -181,7 +185,8 @@ export async function handleInboundMessage(rawMessage: Record<string, unknown>) 
   }
 
   if (isStale) return;
-  if (!conversation.ai_enabled) return; // humano assumiu — bot fica quieto
+  // humano assumiu (fila/aberta) ou atendimento encerrado — bot fica quieto
+  if (conversation.status !== "bot" || !conversation.ai_enabled) return;
 
   scheduleDebounced(conversation.id, () => runAgentTurn(conversation.id));
 }

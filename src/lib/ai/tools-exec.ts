@@ -1,7 +1,7 @@
 import { createServiceClient } from "@/lib/supabase/service";
 import { sendText, sendMedia } from "@/lib/whatsapp/uazapi";
 import { logEvent } from "@/lib/log";
-import { scheduleStage, STAGE_DONE } from "@/lib/followup/engine";
+import { STAGE_DONE } from "@/lib/followup/engine";
 import { copyOptOut, MENSAGEM_HANDOFF } from "@/lib/followup/messages";
 
 type Db = ReturnType<typeof createServiceClient>;
@@ -150,16 +150,11 @@ async function toolEnviarMaterial(ctx: ToolContext) {
   }
 
   if (!ctx.materialSentAt && (resultado.enviado_copy || resultado.enviado_video || resultado.enviado_pdf)) {
-    // material enviado = entrada na régua. O D1 sai no fim da tarde, não daqui a X horas.
-    const agora = new Date();
-    const dia1 = scheduleStage(1, agora, null, agora);
+    // só registra quando o material saiu — a cadência de follow-up é (re)iniciada pelo
+    // agente no fim do turno, ancorada na última mensagem do robô
     await ctx.db
       .from("conversations")
-      .update({
-        material_sent_at: agora.toISOString(),
-        followup_stage: 1,
-        next_followup_at: dia1?.at.toISOString() ?? null,
-      })
+      .update({ material_sent_at: new Date().toISOString() })
       .eq("id", ctx.conversationId);
   }
 

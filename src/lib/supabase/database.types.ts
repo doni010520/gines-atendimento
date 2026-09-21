@@ -150,6 +150,8 @@ export type Database = {
           last_followup_shift: string | null
           opt_out: boolean
           visit_offers_count: number
+          followup_anchor_at: string | null
+          tags: string[]
         }
         Insert: {
           ai_enabled?: boolean
@@ -171,6 +173,8 @@ export type Database = {
           last_followup_shift?: string | null
           opt_out?: boolean
           visit_offers_count?: number
+          followup_anchor_at?: string | null
+          tags?: string[]
         }
         Update: {
           ai_enabled?: boolean
@@ -192,6 +196,8 @@ export type Database = {
           last_followup_shift?: string | null
           opt_out?: boolean
           visit_offers_count?: number
+          followup_anchor_at?: string | null
+          tags?: string[]
         }
         Relationships: [
           {
@@ -216,6 +222,33 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      followup_media: {
+        Row: {
+          touch: number
+          media_type: string
+          url: string
+          storage_path: string
+          file_name: string | null
+          updated_at: string
+        }
+        Insert: {
+          touch: number
+          media_type: string
+          url: string
+          storage_path: string
+          file_name?: string | null
+          updated_at?: string
+        }
+        Update: {
+          touch?: number
+          media_type?: string
+          url?: string
+          storage_path?: string
+          file_name?: string | null
+          updated_at?: string
+        }
+        Relationships: []
       }
       messages: {
         Row: {
