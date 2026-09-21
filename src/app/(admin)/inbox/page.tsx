@@ -9,6 +9,7 @@ type Conversa = {
   id: string;
   status: string;
   last_message_at: string | null;
+  tags: string[];
   contact: { name: string | null; phone: string } | null;
   property: { title: string } | null;
 };
@@ -17,7 +18,7 @@ export default async function InboxPage() {
   const supabase = await createSupabaseServerClient();
   const { data: conversations } = await supabase
     .from("conversations")
-    .select("id,status,last_message_at,contact:contacts(name,phone),property:properties(title)")
+    .select("id,status,last_message_at,tags,contact:contacts(name,phone),property:properties(title)")
     .order("last_message_at", { ascending: false })
     .limit(100);
 
@@ -71,7 +72,14 @@ export default async function InboxPage() {
                           <span className="truncate font-semibold text-ink">
                             {c.contact?.name ?? c.contact?.phone ?? "—"}
                           </span>
-                          <Badge tone={status.tone}>{status.label}</Badge>
+                          <span className="flex shrink-0 items-center gap-1.5">
+                            {c.tags.map((tag) => (
+                              <Badge key={tag} tone="warn" className="hidden sm:inline-flex">
+                                {tag}
+                              </Badge>
+                            ))}
+                            <Badge tone={status.tone}>{status.label}</Badge>
+                          </span>
                         </div>
                         <div className="flex items-center justify-between gap-3 text-xs">
                           <span className="flex min-w-0 items-center gap-2 text-ink-muted">

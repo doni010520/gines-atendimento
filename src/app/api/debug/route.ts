@@ -2,17 +2,16 @@ import { NextRequest, NextResponse } from "next/server";
 import { createServiceClient } from "@/lib/supabase/service";
 import { executeTool, type ToolContext } from "@/lib/ai/tools-exec";
 import {
-  buildCopyVars,
-  dispararEstagioAgora,
-  renderStage,
-  scheduleStage,
-  PROPERTY_COPY_COLUMNS,
-  type PropertyForCopy,
+  dispararToqueAgora,
+  scheduleTouch,
+  TOUCH_OFFSET_HOURS,
+  TAG_PERDIDO,
 } from "@/lib/followup/engine";
+import { gerarTextoToque, OBJETIVO_TOQUE } from "@/lib/followup/ai-copy";
+import { isMediaTouch } from "@/lib/followup/media";
 import { copyOptOut, MENSAGEM_HANDOFF } from "@/lib/followup/messages";
 import { parseUazapiMessage } from "@/lib/whatsapp/parse-webhook";
 import { casarImovelPorAnuncio } from "@/lib/whatsapp/match-property";
-import { SHIFT_LABEL, type Shift } from "@/lib/followup/business-hours";
 
 export const dynamic = "force-dynamic";
 
@@ -22,7 +21,7 @@ export const dynamic = "force-dynamic";
  *
  *   GET /api/debug?token=...&action=recent-messages&conversationId=...
  *   GET /api/debug?token=...&action=logs&limit=50
- *   GET /api/debug?token=...&action=regua-preview[&propertyId=...&nome=Ricardo]
+ *   GET /api/debug?token=...&action=regua-preview[&conversationId=...]
  *   POST /api/debug?token=...&action=test-tool  body: { conversationId, name, args }
  *   POST /api/debug?token=...&action=regua-disparar&confirmar=1  body: { conversationId }
  *   POST /api/debug?token=...&action=ad-match  body: <payload cru da uazapi>
@@ -58,52 +57,28 @@ export async function GET(req: NextRequest) {
   }
 
   /**
-   * Mostra as 3 mensagens da régua exatamente como o cliente receberia, com os dados reais
-   * do imóvel, e quando cada uma sairia se o material fosse enviado agora. NÃO envia nada.
-   * Sem propertyId, lista os imóveis ativos pra escolher.
+   * Mostra a agenda da cadência (6 toques) considerando que o robô falou agora, com o
+   * objetivo e a mídia de cada toque. Com conversationId, gera também o texto que a IA
+   * mandaria em cada toque a partir do histórico real (chama a OpenAI). NÃO envia nada.
    */
   if (action === "regua-preview") {
-    const propertyId = req.nextUrl.searchParams.get("propertyId");
-    const nome = req.nextUrl.searchParams.get("nome");
-
-    if (!propertyId) {
-      const { data, error } = await db
-        .from("properties")
-        .select("id,title,kind,neighborhood,status")
-        .eq("status", "ativo")
-        .order("created_at", { ascending: false });
-      return NextResponse.json({
-        ok: !error,
-        aviso: "escolha um e repita com &propertyId=<id>",
-        imoveis: data,
-        error: error?.message,
-      });
-    }
-
-    const { data: property, error } = await db
-      .from("properties")
-      .select(PROPERTY_COPY_COLUMNS)
-      .eq("id", propertyId)
-      .maybeSingle();
-    if (error || !property) {
-      return NextResponse.json({ ok: false, error: error?.message ?? "imóvel não encontrado" }, { status: 404 });
-    }
-
+    const conversationId = req.nextUrl.searchParams.get("conversationId");
     const now = new Date();
-    const vars = await buildCopyVars(db, property as PropertyForCopy, nome, now);
 
-    // encadeia os 3 estágios como o motor faria, respeitando a alternância de turnos
-    const agenda: Array<{ at: Date; shift: Shift } | null> = [];
-    let lastShift: Shift | null = null;
-    for (const stage of [1, 2, 3]) {
-      const slot = scheduleStage(stage, now, lastShift, now);
-      agenda.push(slot);
-      lastShift = slot?.shift ?? lastShift;
-    }
+    const { data: midias } = await db.from("followup_media").select("touch,media_type,url");
+    const midiaPorToque = new Map((midias ?? []).map((m) => [m.touch, m]));
 
-    const quando = (slot: { at: Date; shift: Shift } | null) =>
-      slot
-        ? `${new Intl.DateTimeFormat("pt-BR", {
+    const { data: conversa } = conversationId
+      ? await db
+          .from("conversations")
+          .select("id,property_id,contact:contacts(name)")
+          .eq("id", conversationId)
+          .maybeSingle()
+      : { data: null };
+
+    const fmt = (d: Date | null) =>
+      d
+        ? new Intl.DateTimeFormat("pt-BR", {
             weekday: "short",
             day: "2-digit",
             month: "2-digit",
@@ -111,25 +86,40 @@ export async function GET(req: NextRequest) {
             minute: "2-digit",
             hour12: false,
             timeZone: "America/Sao_Paulo",
-          }).format(slot.at)} (${SHIFT_LABEL[slot.shift]})`
+          }).format(d)
         : "—";
+
+    const toques = [];
+    for (const touch of Object.keys(TOUCH_OFFSET_HOURS).map(Number)) {
+      const midia = midiaPorToque.get(touch);
+      const texto = conversa
+        ? await gerarTextoToque({
+            db,
+            conversationId: conversa.id,
+            touch,
+            nome: conversa.contact?.name ?? null,
+            propertyId: conversa.property_id,
+            now,
+          })
+        : null;
+      toques.push({
+        toque: touch,
+        horas: TOUCH_OFFSET_HOURS[touch],
+        quando: fmt(scheduleTouch(touch, now)),
+        objetivo: OBJETIVO_TOQUE[touch],
+        midia: isMediaTouch(touch) ? (midia ? `${midia.media_type}: ${midia.url}` : "(slot vazio — só texto)") : "—",
+        ...(texto ? { mensagem: texto.texto, origem: texto.origem } : {}),
+      });
+    }
 
     return NextResponse.json({
       ok: true,
-      imovel: { id: property.id, titulo: property.title, tipo: vars.tipo, local: vars.local },
-      destaques_extraidos: {
-        visual: vars.destaqueVisual || "(nenhum sustentado pela base — a frase sai da copy)",
-        tecnico: vars.destaqueTecnico || "(nenhum sustentado pela base — a frase sai da copy)",
-        base_afirma_reforma: vars.reformado,
-      },
-      simulacao: "considerando que o material fosse enviado agora",
-      regua: [
-        { etapa: "D1", quando: quando(agenda[0]), mensagem: renderStage(1, vars) },
-        { etapa: "D3", quando: quando(agenda[1]), mensagem: renderStage(2, vars) },
-        { etapa: "D7", quando: quando(agenda[2]), mensagem: renderStage(3, vars) },
-      ],
+      simulacao: "considerando que o robô mandou a última mensagem agora e o lead não respondeu",
+      ...(conversationId && !conversa ? { aviso: "conversa não encontrada — mostrando só a agenda" } : {}),
+      cadencia: toques,
+      ao_encerrar: `tag "${TAG_PERDIDO}"`,
       frases_fixas: {
-        opt_out: copyOptOut(nome),
+        opt_out: copyOptOut(conversa?.contact?.name ?? null),
         handoff: MENSAGEM_HANDOFF,
       },
     });
@@ -143,8 +133,8 @@ export async function POST(req: NextRequest) {
   const action = req.nextUrl.searchParams.get("action");
 
   /**
-   * Dispara o estágio atual da régua AGORA, ignorando a janela de horário. Serve pra ver
-   * D1/D3/D7 no mesmo dia em vez de esperar uma semana. Manda WhatsApp DE VERDADE e avança
+   * Dispara o toque atual da cadência AGORA, ignorando a janela de horário. Serve pra ver
+   * os 6 toques no mesmo dia em vez de esperar 9 dias. Manda WhatsApp DE VERDADE e avança
    * o estado igual ao cron — por isso exige confirmar=1 além do token.
    */
   if (action === "regua-disparar") {
@@ -159,7 +149,7 @@ export async function POST(req: NextRequest) {
     if (!conversationId) return NextResponse.json({ ok: false, error: "conversationId é obrigatório" }, { status: 400 });
 
     const db = createServiceClient();
-    const resultado = await dispararEstagioAgora(db, conversationId);
+    const resultado = await dispararToqueAgora(db, conversationId);
     return NextResponse.json({ ok: resultado.enviado, ...resultado });
   }
 

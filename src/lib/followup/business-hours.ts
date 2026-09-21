@@ -1,11 +1,12 @@
 /**
- * Janela e turnos da régua de conversão (regra do Gines, 26/08/26).
+ * Janela de horário da cadência de follow-up.
  *
- * - Janela permitida: 09h30 às 19h30. Bloqueado das 20h às 09h (descanso e rush matinal).
- * - Turnos: manhã (10h–11h), tarde (14h30–15h30), fim de tarde (17h30–18h30).
- * - Alternância obrigatória: nunca dois follow-ups seguidos no mesmo turno.
+ * - Janela permitida: 09h30 às 19h30 (regra do Gines, 26/08/26). Bloqueado das 20h às 09h.
+ * - Domingo segue bloqueado.
+ * - Toque que vence fora da janela é adiado pro próximo horário permitido — nunca pulado.
  *
- * Domingo segue bloqueado, como já era antes desta régua.
+ * A rotação de turnos da régua D1/D3/D7 saiu junto com ela: a cadência nova conta horas
+ * a partir da última mensagem do robô, então não há mais "turno certo" por estágio.
  *
  * São Paulo não tem horário de verão desde 2019, então o offset fixo -03:00 é exato —
  * é o que permite fazer conta de "hora de parede" com os getters UTC, sem dependência.
@@ -15,36 +16,6 @@ const TZ_OFFSET_MS = -3 * 60 * 60 * 1000;
 
 const WINDOW_OPEN = 9 * 60 + 30; // 09:30
 const WINDOW_CLOSE = 19 * 60 + 30; // 19:30
-
-export type Shift = "manha" | "tarde" | "fim_tarde";
-
-/** Início do slot sugerido de cada turno. */
-const SHIFT_START: Record<Shift, number> = {
-  manha: 10 * 60, // 10:00–11:00
-  tarde: 14 * 60 + 30, // 14:30–15:30
-  fim_tarde: 17 * 60 + 30, // 17:30–18:30
-};
-const SLOT_LENGTH_MIN = 60;
-
-/** Faixa larga usada pra dizer em que turno um horário qualquer cai. */
-const SHIFT_BANDS: Array<{ shift: Shift; from: number; to: number }> = [
-  { shift: "manha", from: WINDOW_OPEN, to: 12 * 60 },
-  { shift: "tarde", from: 12 * 60, to: 17 * 60 },
-  { shift: "fim_tarde", from: 17 * 60, to: WINDOW_CLOSE },
-];
-
-const ROTATION: Shift[] = ["manha", "tarde", "fim_tarde"];
-
-/** O turno vem do banco como texto livre — só entra no domínio se for válido. */
-export function parseShift(value: string | null | undefined): Shift | null {
-  return ROTATION.find((s) => s === value) ?? null;
-}
-
-export const SHIFT_LABEL: Record<Shift, string> = {
-  manha: "manhã",
-  tarde: "início da tarde",
-  fim_tarde: "fim de tarde",
-};
 
 function toSpWall(d: Date): Date {
   return new Date(d.getTime() + TZ_OFFSET_MS);
@@ -70,66 +41,33 @@ export function isWithinWindow(date: Date): boolean {
   return m >= WINDOW_OPEN && m < WINDOW_CLOSE;
 }
 
-/** Em qual turno este horário cai — null se está fora da janela. */
-export function shiftOf(date: Date): Shift | null {
-  if (!isWithinWindow(date)) return null;
-  const m = minutesOfDay(toSpWall(date));
-  return SHIFT_BANDS.find((b) => m >= b.from && m < b.to)?.shift ?? null;
-}
-
 /**
- * Garante a alternância: se o turno sugerido pro estágio é o mesmo do último envio,
- * pula pro próximo da rotação.
+ * O próprio horário, se está na janela; senão a próxima abertura (09h30 do próximo dia
+ * permitido). É o que adia um toque que venceu de madrugada ou no domingo.
  */
-export function resolveShift(preferred: Shift, lastShift: Shift | null): Shift {
-  if (!lastShift || preferred !== lastShift) return preferred;
-  return ROTATION[(ROTATION.indexOf(preferred) + 1) % ROTATION.length];
-}
-
-/**
- * Próxima ocorrência do slot desse turno, a partir de `from`.
- * `minDaysAhead` empurra a contagem N dias (é o que separa D1 / D3 / D7).
- */
-export function nextShiftSlot(from: Date, shift: Shift, minDaysAhead = 0): Date {
-  const wall = toSpWall(from);
-  const target = SHIFT_START[shift];
-
-  const day = new Date(
-    Date.UTC(wall.getUTCFullYear(), wall.getUTCMonth(), wall.getUTCDate(), 0, 0, 0, 0)
-  );
-  day.setUTCDate(day.getUTCDate() + minDaysAhead);
-
-  for (let i = 0; i < 21; i++) {
-    const slot = new Date(day.getTime() + target * 60_000);
-    if (!isSunday(slot) && slot.getTime() > wall.getTime()) return fromSpWall(slot);
+export function nextAllowedTime(date: Date): Date {
+  if (isWithinWindow(date)) return date;
+  const wall = toSpWall(date);
+  const day = new Date(Date.UTC(wall.getUTCFullYear(), wall.getUTCMonth(), wall.getUTCDate(), 0, 0, 0, 0));
+  // ainda antes da abertura hoje: abre hoje mesmo (se não for domingo)
+  if (minutesOfDay(wall) >= WINDOW_OPEN) day.setUTCDate(day.getUTCDate() + 1);
+  for (let i = 0; i < 7; i++) {
+    if (!isSunday(day)) return fromSpWall(new Date(day.getTime() + WINDOW_OPEN * 60_000));
     day.setUTCDate(day.getUTCDate() + 1);
   }
-  // inalcançável na prática (21 dias sempre contêm um dia útil), mas nunca retorna inválido
-  return fromSpWall(new Date(day.getTime() + target * 60_000));
+  // inalcançável (7 dias sempre têm dia útil), mas nunca retorna inválido
+  return fromSpWall(new Date(day.getTime() + WINDOW_OPEN * 60_000));
 }
 
 /**
- * Pode disparar agora? Sim quando está dentro do slot do turno certo — ou quando o slot
- * já passou mas ainda estamos na janela permitida e num turno diferente do último envio
- * (recuperação de atraso: cron parado, fila grande). Nunca fura a alternância.
- */
-export function shouldSendNow(now: Date, shift: Shift, lastShift: Shift | null): boolean {
-  const current = shiftOf(now);
-  if (!current) return false;
-  if (lastShift && current === lastShift) return false;
-  if (current === shift) return true;
-  return minutesOfDay(toSpWall(now)) > SHIFT_START[shift] + SLOT_LENGTH_MIN;
-}
-
-/**
- * Modo de teste: comprime D1/D3/D7 em minutos e libera a janela, pra validar a régua
- * inteira em poucos minutos em vez de uma semana.
+ * Modo de teste: comprime a cadência (cada toque vira N minutos depois do anterior, contando
+ * da âncora) e libera a janela, pra validar os 6 toques em minutos em vez de 9 dias.
  *
  * Exige DEBUG=true JUNTO com FOLLOWUP_TEST_GAP_MIN — em produção DEBUG é "false", então
  * a variável sozinha não faz nada. Sem essa dupla trava, um valor esquecido no ambiente
- * mandaria as 3 mensagens da régua em minutos, de madrugada, pra cliente real.
+ * mandaria a cadência inteira em minutos, de madrugada, pra cliente real.
  *
- * @returns intervalo em ms entre estágios, ou null quando o modo está desligado.
+ * @returns intervalo em ms entre toques, ou null quando o modo está desligado.
  */
 export function modoTesteGapMs(): number | null {
   if (process.env.DEBUG !== "true") return null;
@@ -139,7 +77,7 @@ export function modoTesteGapMs(): number | null {
   return minutos * 60_000;
 }
 
-/** Saudação correta pro horário real do disparo (o slot pode escorregar). */
+/** Saudação correta pro horário real do disparo. */
 export function greetingFor(date: Date): string {
   const m = minutesOfDay(toSpWall(date));
   if (m < 12 * 60) return "Bom dia";

@@ -1,66 +1,109 @@
 import { createServiceClient } from "@/lib/supabase/service";
-import { sendText } from "@/lib/whatsapp/uazapi";
-import {
-  greetingFor,
-  modoTesteGapMs,
-  nextShiftSlot,
-  parseShift,
-  resolveShift,
-  shouldSendNow,
-  type Shift,
-} from "./business-hours";
-import { copyDia1, copyDia3, copyDia7, type CopyVars } from "./messages";
-import { getHighlights, pareceReformado, type PropertyForHighlights } from "./highlights";
+import { sendMedia, sendText } from "@/lib/whatsapp/uazapi";
+import { isWithinWindow, modoTesteGapMs, nextAllowedTime } from "./business-hours";
+import { gerarTextoToque } from "./ai-copy";
+import { isMediaTouch } from "./media";
 import { logEvent } from "@/lib/log";
 
 /**
- * Régua de conversão do Gines (26/08/26):
- *   estágio 1 = Dia 1, fim de tarde      — recepção do material + facilidade de visitação
- *   estágio 2 = Dia 3, manhã             — pronto para morar + diferencial técnico
- *   estágio 3 = Dia 7, início da tarde   — escassez sutil + último contato ativo
- *   estágio 4 = encerrada, não manda mais nada (é o que a copy do D7 promete ao cliente)
+ * Cadência de follow-up (spec do cliente, 09/26).
  *
- * Os dias contam a partir do envio do material, não do disparo anterior — atraso num
- * estágio não empurra os seguintes.
+ * O relógio começa na ÚLTIMA mensagem do robô sem resposta do lead (a "âncora"). Qualquer
+ * resposta do lead para tudo; a próxima resposta do robô recomeça do toque 1, ancorada nela.
+ *
+ *   toque 1 = 24h   texto (retoma de onde parou) + áudio/vídeo
+ *   toque 2 = 48h   texto (tentativa leve)
+ *   toque 3 = 96h   texto (escassez) + áudio/vídeo
+ *   toque 4 = 120h  texto (investigação)
+ *   toque 5 = 168h  texto (penúltima tentativa)
+ *   toque 6 = 216h  texto (ultimato) + áudio/vídeo -> tag "Perdido por Falta de Retorno" e fim
+ *
+ * As horas contam a partir da âncora, não do toque anterior — atraso num toque (janela de
+ * horário, cron parado) não empurra os seguintes.
+ *
+ * followup_stage: 0 = parada; 1..6 = próximo toque a enviar; STAGE_DONE = encerrada.
  */
 
-const STAGE_SHIFT: Record<number, Shift> = { 1: "fim_tarde", 2: "manha", 3: "tarde" };
-const STAGE_DAY_OFFSET: Record<number, number> = { 1: 0, 2: 2, 3: 6 };
-export const STAGE_DONE = 4;
+export const TOUCH_OFFSET_HOURS: Record<number, number> = { 1: 24, 2: 48, 3: 96, 4: 120, 5: 168, 6: 216 };
+export const LAST_TOUCH = 6;
+export const STAGE_DONE = 7;
+export const TAG_PERDIDO = "Perdido por Falta de Retorno";
 
-/** O D1 nunca cola no envio do material, mesmo que o material tenha ido no fim da tarde. */
-const MIN_GAP_AFTER_MATERIAL_MS = 2 * 60 * 60 * 1000;
+/**
+ * Piso entre dois toques. Se o cron ficou parado e vários toques venceram juntos, eles
+ * saem espaçados em vez de em rajada — o lead não recebe três mensagens no mesmo minuto.
+ */
+const MIN_GAP_BETWEEN_TOUCHES_MS = 60 * 60 * 1000;
 
 const BATCH_SIZE = 20;
 
-/** Quando e em que turno o estágio deve sair. */
-export function scheduleStage(
-  stage: number,
-  materialSentAt: Date,
-  lastShift: Shift | null,
-  now: Date = new Date()
-): { at: Date; shift: Shift } | null {
-  if (!STAGE_SHIFT[stage]) return null;
+type Db = ReturnType<typeof createServiceClient>;
 
-  const shift = resolveShift(STAGE_SHIFT[stage], lastShift);
+/**
+ * Quando o toque deve sair, dada a âncora. Já aplica a janela de horário (fora dela, adia
+ * pra próxima abertura) e o piso `notBefore`. No modo de teste, o toque N sai N×gap depois
+ * da âncora e a janela é ignorada.
+ */
+export function scheduleTouch(touch: number, anchor: Date, notBefore?: Date): Date | null {
+  const horas = TOUCH_OFFSET_HOURS[touch];
+  if (horas === undefined) return null;
 
-  // modo de teste: o próximo estágio sai daqui a poucos minutos, mantendo a rotação de
-  // turnos (dá pra conferir a alternância mesmo com os dias comprimidos)
   const gapTeste = modoTesteGapMs();
-  if (gapTeste !== null) return { at: new Date(now.getTime() + gapTeste), shift };
+  if (gapTeste !== null) {
+    const at = new Date(anchor.getTime() + touch * gapTeste);
+    return notBefore && at < notBefore ? notBefore : at;
+  }
 
-  let at = nextShiftSlot(materialSentAt, shift, STAGE_DAY_OFFSET[stage]);
-
-  const floor = new Date(now.getTime() + (stage === 1 ? MIN_GAP_AFTER_MATERIAL_MS : 0));
-  if (at.getTime() < floor.getTime()) at = nextShiftSlot(floor, shift, 0);
-
-  return { at, shift };
+  let at = new Date(anchor.getTime() + horas * 60 * 60 * 1000);
+  if (notBefore && at < notBefore) at = notBefore;
+  return nextAllowedTime(at);
 }
 
 /**
- * Pega as conversas com follow-up vencido e dispara o estágio certo. Só atua em conversa
- * 'bot' com IA ligada e sem opt-out — se está em fila/aberta/fechada, um humano já assumiu
- * o próximo passo e o cron não se mete.
+ * Robô acabou de falar: (re)começa a cadência do toque 1 ancorada nessa mensagem.
+ * Só vale pra conversa do robô, com IA ligada e sem opt-out — o mesmo filtro do cron.
+ */
+export async function iniciarCadencia(db: Db, conversationId: string, anchor: Date) {
+  const primeiro = scheduleTouch(1, anchor);
+  const { error } = await db
+    .from("conversations")
+    .update({
+      followup_anchor_at: anchor.toISOString(),
+      followup_stage: 1,
+      next_followup_at: primeiro?.toISOString() ?? null,
+    })
+    .eq("id", conversationId)
+    .eq("status", "bot")
+    .eq("ai_enabled", true)
+    .eq("opt_out", false);
+  if (error) {
+    await logEvent("error", "followup", "falha ao iniciar cadência", { conversationId, error: error.message });
+  }
+}
+
+/** Lead respondeu: a cadência para até o robô falar de novo. */
+export async function pararCadencia(db: Db, conversationId: string) {
+  await db
+    .from("conversations")
+    .update({ followup_stage: 0, next_followup_at: null, followup_anchor_at: null })
+    .eq("id", conversationId);
+}
+
+const DUE_COLUMNS = "id,contact_id,property_id,followup_stage,followup_anchor_at,tags,bot_lock_until";
+
+type DueConversation = {
+  id: string;
+  contact_id: string;
+  property_id: string | null;
+  followup_stage: number;
+  followup_anchor_at: string | null;
+  tags: string[];
+  bot_lock_until: string | null;
+};
+
+/**
+ * Pega as conversas com toque vencido e dispara. Só atua em conversa 'bot' com IA ligada e
+ * sem opt-out — se está em fila/aberta/fechada, um humano já assumiu e o cron não se mete.
  */
 export async function runFollowupEngine() {
   const db = createServiceClient();
@@ -68,12 +111,12 @@ export async function runFollowupEngine() {
 
   const { data: due, error } = await db
     .from("conversations")
-    .select("id,contact_id,property_id,followup_stage,last_followup_shift,material_sent_at")
+    .select(DUE_COLUMNS)
     .eq("status", "bot")
     .eq("ai_enabled", true)
     .eq("opt_out", false)
     .gte("followup_stage", 1)
-    .lt("followup_stage", STAGE_DONE)
+    .lte("followup_stage", LAST_TOUCH)
     .lte("next_followup_at", nowIso)
     .limit(BATCH_SIZE);
 
@@ -85,7 +128,7 @@ export async function runFollowupEngine() {
 
   const gapTeste = modoTesteGapMs();
   if (gapTeste !== null) {
-    await logEvent("warn", "followup", "MODO DE TESTE ligado — janela ignorada e estágios comprimidos", {
+    await logEvent("warn", "followup", "MODO DE TESTE ligado — janela ignorada e toques comprimidos", {
       gapMinutos: gapTeste / 60_000,
       conversas: due.length,
     });
@@ -107,177 +150,149 @@ export async function runFollowupEngine() {
   return { processed, sent };
 }
 
-/** Campos do imóvel que as copies da régua consomem. */
-export type PropertyForCopy = PropertyForHighlights & {
-  neighborhood: string | null;
-  city: string | null;
-  video_url: string | null;
-  pdf_url: string | null;
-};
-
-/** Colunas que precisam vir do banco pra montar qualquer copy da régua. */
-export const PROPERTY_COPY_COLUMNS =
-  "id,title,kind,copy,features,area_built,suites,parking_spots,neighborhood,city,video_url,pdf_url,highlight_visual,highlight_tecnico";
-
-export async function buildCopyVars(
-  db: ReturnType<typeof createServiceClient>,
-  property: PropertyForCopy,
-  nome: string | null,
-  now: Date
-): Promise<CopyVars> {
-  const highlights = await getHighlights(db, property);
-  return {
-    nome,
-    local: property.neighborhood?.trim() || property.city?.trim() || "",
-    tipo: property.kind?.trim() || "imóvel",
-    destaqueVisual: highlights.visual,
-    destaqueTecnico: highlights.tecnico,
-    reformado: pareceReformado(property),
-    temPdf: Boolean(property.pdf_url),
-    temVideo: Boolean(property.video_url),
-    saudacao: greetingFor(now),
-  };
-}
-
-export function renderStage(stage: number, vars: CopyVars): string {
-  if (stage === 1) return copyDia1(vars);
-  if (stage === 2) return copyDia3(vars);
-  return copyDia7(vars);
-}
-
-type DueConversation = {
-  id: string;
-  contact_id: string;
-  property_id: string | null;
-  followup_stage: number;
-  last_followup_shift: string | null;
-  material_sent_at: string | null;
-};
-
-/** @returns true se a mensagem foi enviada de fato (false = só reagendou). */
-async function processOne(db: ReturnType<typeof createServiceClient>, conv: DueConversation): Promise<boolean> {
+/** @returns true se o toque foi enviado de fato (false = só reagendou/parou). */
+async function processOne(db: Db, conv: DueConversation): Promise<boolean> {
   const now = new Date();
-  const preferido = STAGE_SHIFT[conv.followup_stage];
 
-  // estágio fora da régua (dado antigo, migração): encerra em vez de tentar adivinhar turno
-  if (!preferido) {
-    await encerrarRegua(db, conv.id);
-    return false;
-  }
+  // agente respondendo nesse instante: deixa pra próxima rodada, ele vai reancorar a cadência
+  if (conv.bot_lock_until && conv.bot_lock_until > now.toISOString()) return false;
 
-  const lastShift = parseShift(conv.last_followup_shift);
-  const shift = resolveShift(preferido, lastShift);
-
-  // fora do turno certo: só reagenda, nunca pula estágio nem manda fora de hora
+  // fora da janela: só adia, nunca pula toque nem manda fora de hora
   // (no modo de teste a janela é ignorada de propósito — é o ponto do modo)
-  if (modoTesteGapMs() === null && !shouldSendNow(now, shift, lastShift)) {
+  if (modoTesteGapMs() === null && !isWithinWindow(now)) {
     await db
       .from("conversations")
-      .update({ next_followup_at: nextShiftSlot(now, shift, 0).toISOString() })
+      .update({ next_followup_at: nextAllowedTime(now).toISOString() })
       .eq("id", conv.id);
     return false;
   }
 
-  const resultado = await enviarEstagio(db, conv, shift, now);
+  const resultado = await enviarToque(db, conv, now);
   return resultado.enviado;
-}
-
-async function encerrarRegua(db: ReturnType<typeof createServiceClient>, conversationId: string) {
-  await db
-    .from("conversations")
-    .update({ followup_stage: STAGE_DONE, next_followup_at: null })
-    .eq("id", conversationId);
 }
 
 export type ResultadoEnvio = {
   enviado: boolean;
   motivo?: string;
-  etapa?: string;
-  turno?: Shift;
+  toque?: number;
   mensagem?: string;
-  proximo?: { quando: string; turno: Shift } | null;
+  origemTexto?: "ia" | "fallback";
+  midia?: { tipo: string; url: string } | null;
+  proximo?: string | null;
+  encerrada?: boolean;
 };
 
-const ETAPA_LABEL: Record<number, string> = { 1: "D1", 2: "D3", 3: "D7" };
-
 /**
- * Monta a copy do estágio atual, envia e avança o estado da conversa.
+ * Gera o texto do toque atual, envia (texto + mídia do slot, se houver) e avança o estado.
  * Único ponto que manda follow-up — o cron e o disparo manual de teste passam os dois por
  * aqui, senão o teste validaria um caminho que a produção não usa.
  */
-async function enviarEstagio(
-  db: ReturnType<typeof createServiceClient>,
-  conv: DueConversation,
-  shift: Shift,
-  now: Date
-): Promise<ResultadoEnvio> {
-  const stage = conv.followup_stage;
+async function enviarToque(db: Db, conv: DueConversation, now: Date): Promise<ResultadoEnvio> {
+  const touch = conv.followup_stage;
+  if (TOUCH_OFFSET_HOURS[touch] === undefined) return { enviado: false, motivo: "estágio fora da cadência" };
+
+  // defesa: se a última mensagem visível é do lead, a cadência não devia estar rodando
+  const { data: ultima } = await db
+    .from("messages")
+    .select("direction")
+    .eq("conversation_id", conv.id)
+    .eq("is_internal", false)
+    .order("created_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  if (!ultima || ultima.direction === "in" || !conv.followup_anchor_at) {
+    await pararCadencia(db, conv.id);
+    return { enviado: false, motivo: "lead respondeu depois da última mensagem do robô — cadência parada" };
+  }
 
   const { data: contact } = await db.from("contacts").select("phone,name").eq("id", conv.contact_id).single();
   if (!contact) return { enviado: false, motivo: "contato não encontrado" };
 
-  const { data: property } = conv.property_id
-    ? await db.from("properties").select(PROPERTY_COPY_COLUMNS).eq("id", conv.property_id).maybeSingle()
-    : { data: null };
+  const { texto, origem } = await gerarTextoToque({
+    db,
+    conversationId: conv.id,
+    touch,
+    nome: contact.name,
+    propertyId: conv.property_id,
+    now,
+  });
 
-  // sem imóvel em foco não existe copy honesta pra mandar — encerra a régua e deixa pro humano
-  if (!property) {
-    await encerrarRegua(db, conv.id);
-    await logEvent("warn", "followup", "conversa sem imóvel em foco — régua encerrada", { conversationId: conv.id });
-    return { enviado: false, motivo: "conversa sem imóvel em foco — régua encerrada" };
+  await sendText(contact.phone, texto);
+  // entra no histórico como mensagem real: o Gines vê no painel e a IA não repete o assunto
+  await db.from("messages").insert({ conversation_id: conv.id, direction: "out", body: texto, is_internal: false });
+
+  let midia: ResultadoEnvio["midia"] = null;
+  if (isMediaTouch(touch)) {
+    const { data: slot } = await db.from("followup_media").select("media_type,url").eq("touch", touch).maybeSingle();
+    if (slot) {
+      try {
+        // áudio vai como "ptt" pra chegar como mensagem de voz, não como arquivo
+        await sendMedia({ number: contact.phone, type: slot.media_type === "video" ? "video" : "ptt", file: slot.url });
+        await db.from("messages").insert({
+          conversation_id: conv.id,
+          direction: "out",
+          body: slot.media_type === "video" ? "[vídeo da cadência enviado]" : "[áudio da cadência enviado]",
+          media_url: slot.url,
+          media_type: slot.media_type,
+          is_internal: false,
+        });
+        midia = { tipo: slot.media_type, url: slot.url };
+      } catch (err) {
+        // o texto já foi — falha na mídia não trava a cadência
+        await logEvent("error", "followup", "falha ao enviar mídia do toque", {
+          conversationId: conv.id,
+          touch,
+          error: err instanceof Error ? err.message : String(err),
+        });
+      }
+    }
   }
 
-  const vars = await buildCopyVars(db, property, contact.name, now);
-  const body = renderStage(stage, vars);
-
-  await sendText(contact.phone, body);
-
-  const proximo = scheduleStage(stage + 1, new Date(conv.material_sent_at ?? now.toISOString()), shift, now);
+  const encerrada = touch >= LAST_TOUCH;
+  const piso = new Date(now.getTime() + Math.min(MIN_GAP_BETWEEN_TOUCHES_MS, modoTesteGapMs() ?? Infinity));
+  const proximo = encerrada ? null : scheduleTouch(touch + 1, new Date(conv.followup_anchor_at), piso);
 
   await db
     .from("conversations")
     .update({
-      followup_stage: proximo ? stage + 1 : STAGE_DONE,
-      next_followup_at: proximo ? proximo.at.toISOString() : null,
-      last_followup_shift: shift,
+      followup_stage: encerrada || !proximo ? STAGE_DONE : touch + 1,
+      next_followup_at: proximo?.toISOString() ?? null,
       last_message_at: now.toISOString(),
+      ...(encerrada ? { tags: Array.from(new Set([...(conv.tags ?? []), TAG_PERDIDO])) } : {}),
     })
     .eq("id", conv.id);
 
-  // entra no histórico como mensagem real: o Gines vê no painel e a IA não repete o assunto
-  await db.from("messages").insert({
-    conversation_id: conv.id,
-    direction: "out",
-    body,
-    is_internal: false,
-  });
+  if (encerrada) {
+    await logEvent("info", "followup", "cadência encerrada sem retorno — conversa marcada como perdida", {
+      conversationId: conv.id,
+    });
+  }
 
   return {
     enviado: true,
-    etapa: ETAPA_LABEL[stage],
-    turno: shift,
-    mensagem: body,
-    proximo: proximo ? { quando: proximo.at.toISOString(), turno: proximo.shift } : null,
+    toque: touch,
+    mensagem: texto,
+    origemTexto: origem,
+    midia,
+    proximo: proximo?.toISOString() ?? null,
+    encerrada,
   };
 }
 
 /**
- * Dispara o estágio atual AGORA, ignorando a janela de horário — só pra teste.
+ * Dispara o toque atual AGORA, ignorando a janela de horário — só pra teste.
  * Manda WhatsApp de verdade e avança o estado igual ao cron, por isso vive atrás do
  * /api/debug (DEBUG=true + token + confirmação explícita).
  */
-export async function dispararEstagioAgora(
-  db: ReturnType<typeof createServiceClient>,
-  conversationId: string
-): Promise<ResultadoEnvio> {
+export async function dispararToqueAgora(db: Db, conversationId: string): Promise<ResultadoEnvio> {
   const { data: conv } = await db
     .from("conversations")
-    .select("id,contact_id,property_id,followup_stage,last_followup_shift,material_sent_at,opt_out,status,ai_enabled")
+    .select(`${DUE_COLUMNS},opt_out,status,ai_enabled`)
     .eq("id", conversationId)
     .maybeSingle();
 
   if (!conv) return { enviado: false, motivo: "conversa não encontrada" };
-  if (conv.opt_out) return { enviado: false, motivo: "conversa com opt-out — a régua está travada de propósito" };
+  if (conv.opt_out) return { enviado: false, motivo: "conversa com opt-out — a cadência está travada de propósito" };
   // mesma condição do cron: humano assumiu, o robô não fala mais. Sem isso, um teste
   // mandaria follow-up pra cliente real que já está sendo atendido por gente.
   if (conv.status !== "bot" || !conv.ai_enabled) {
@@ -286,18 +301,15 @@ export async function dispararEstagioAgora(
       motivo: `conversa está em "${conv.status}" com IA ${conv.ai_enabled ? "ligada" : "desligada"} — o cron também não tocaria nela. Devolva pro robô no painel se quiser testar aqui.`,
     };
   }
-
-  const preferido = STAGE_SHIFT[conv.followup_stage];
-  if (!preferido) {
+  if (conv.followup_stage < 1 || conv.followup_stage > LAST_TOUCH) {
     return {
       enviado: false,
       motivo:
         conv.followup_stage >= STAGE_DONE
-          ? "régua já encerrada (o D7 foi o último contato ativo)"
-          : "conversa ainda não entrou na régua — o material precisa ser enviado antes",
+          ? "cadência já encerrada (o toque 6 foi o último)"
+          : "cadência parada — o robô precisa ter falado por último (sem resposta do lead)",
     };
   }
 
-  const shift = resolveShift(preferido, parseShift(conv.last_followup_shift));
-  return enviarEstagio(db, conv, shift, new Date());
+  return enviarToque(db, conv, new Date());
 }
