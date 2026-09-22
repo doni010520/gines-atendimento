@@ -16,7 +16,7 @@ export default async function CadenciaPage() {
   return (
     <div className="space-y-5">
       <PageHeader
-        title="Cadência de follow-up"
+        title="Configuração de follow-up"
         hint="Quando o lead para de responder, o robô manda 6 toques contados da última mensagem dele."
       />
 

@@ -4,5 +4,5 @@ import { IconBuilding, IconClock, IconInbox } from "@/components/icons";
 export const NAV_ITEMS = [
   { href: "/inbox", label: "Inbox", Icon: IconInbox },
   { href: "/imoveis", label: "Imóveis", Icon: IconBuilding },
-  { href: "/cadencia", label: "Cadência", Icon: IconClock },
+  { href: "/cadencia", label: "Configuração de follow-up", Icon: IconClock },
 ] as const;
