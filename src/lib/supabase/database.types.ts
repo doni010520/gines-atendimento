@@ -151,6 +151,9 @@ export type Database = {
           opt_out: boolean
           visit_offers_count: number
           followup_anchor_at: string | null
+          followup_last_touch_hours: number
+          followup_last_touch_at: string | null
+          followup_next_touch_id: string | null
           tags: string[]
         }
         Insert: {
@@ -174,6 +177,9 @@ export type Database = {
           opt_out?: boolean
           visit_offers_count?: number
           followup_anchor_at?: string | null
+          followup_last_touch_hours?: number
+          followup_last_touch_at?: string | null
+          followup_next_touch_id?: string | null
           tags?: string[]
         }
         Update: {
@@ -197,6 +203,9 @@ export type Database = {
           opt_out?: boolean
           visit_offers_count?: number
           followup_anchor_at?: string | null
+          followup_last_touch_hours?: number
+          followup_last_touch_at?: string | null
+          followup_next_touch_id?: string | null
           tags?: string[]
         }
         Relationships: [
@@ -246,6 +255,72 @@ export type Database = {
           url?: string
           storage_path?: string
           file_name?: string | null
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      followup_settings: {
+        Row: {
+          id: boolean
+          final_tag: string
+          apply_final_tag: boolean
+          updated_at: string
+        }
+        Insert: {
+          id?: boolean
+          final_tag?: string
+          apply_final_tag?: boolean
+          updated_at?: string
+        }
+        Update: {
+          id?: boolean
+          final_tag?: string
+          apply_final_tag?: boolean
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      followup_touches: {
+        Row: {
+          id: string
+          position: number
+          delay_hours: number
+          objective: string
+          fallback_text: string | null
+          media_url: string | null
+          media_path: string | null
+          media_kind: string | null
+          media_file_name: string | null
+          active: boolean
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          position?: number
+          delay_hours: number
+          objective: string
+          fallback_text?: string | null
+          media_url?: string | null
+          media_path?: string | null
+          media_kind?: string | null
+          media_file_name?: string | null
+          active?: boolean
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          id?: string
+          position?: number
+          delay_hours?: number
+          objective?: string
+          fallback_text?: string | null
+          media_url?: string | null
+          media_path?: string | null
+          media_kind?: string | null
+          media_file_name?: string | null
+          active?: boolean
+          created_at?: string
           updated_at?: string
         }
         Relationships: []

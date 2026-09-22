@@ -1,14 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createServiceClient } from "@/lib/supabase/service";
 import { executeTool, type ToolContext } from "@/lib/ai/tools-exec";
-import {
-  dispararToqueAgora,
-  scheduleTouch,
-  TOUCH_OFFSET_HOURS,
-  TAG_PERDIDO,
-} from "@/lib/followup/engine";
-import { gerarTextoToque, OBJETIVO_TOQUE } from "@/lib/followup/ai-copy";
-import { isMediaTouch } from "@/lib/followup/media";
+import { dispararToqueAgora, scheduleTouch } from "@/lib/followup/engine";
+import { gerarTextoToque } from "@/lib/followup/ai-copy";
+import { carregarConfig, carregarToquesAtivos, rotuloDias } from "@/lib/followup/touches";
 import { copyOptOut, MENSAGEM_HANDOFF } from "@/lib/followup/messages";
 import { parseUazapiMessage } from "@/lib/whatsapp/parse-webhook";
 import { casarImovelPorAnuncio } from "@/lib/whatsapp/match-property";
@@ -57,7 +52,7 @@ export async function GET(req: NextRequest) {
   }
 
   /**
-   * Mostra a agenda da cadência (6 toques) considerando que o robô falou agora, com o
+   * Mostra a agenda da cadência (toques ativos cadastrados em /cadencia) considerando que o robô falou agora, com o
    * objetivo e a mídia de cada toque. Com conversationId, gera também o texto que a IA
    * mandaria em cada toque a partir do histórico real (chama a OpenAI). NÃO envia nada.
    */
@@ -65,8 +60,7 @@ export async function GET(req: NextRequest) {
     const conversationId = req.nextUrl.searchParams.get("conversationId");
     const now = new Date();
 
-    const { data: midias } = await db.from("followup_media").select("touch,media_type,url");
-    const midiaPorToque = new Map((midias ?? []).map((m) => [m.touch, m]));
+    const [ativos, config] = await Promise.all([carregarToquesAtivos(db), carregarConfig(db)]);
 
     const { data: conversa } = conversationId
       ? await db
@@ -90,24 +84,27 @@ export async function GET(req: NextRequest) {
         : "—";
 
     const toques = [];
-    for (const touch of Object.keys(TOUCH_OFFSET_HOURS).map(Number)) {
-      const midia = midiaPorToque.get(touch);
+    for (const [i, toque] of ativos.entries()) {
       const texto = conversa
         ? await gerarTextoToque({
             db,
             conversationId: conversa.id,
-            touch,
+            toque,
+            indice: i + 1,
+            total: ativos.length,
             nome: conversa.contact?.name ?? null,
             propertyId: conversa.property_id,
             now,
           })
         : null;
       toques.push({
-        toque: touch,
-        horas: TOUCH_OFFSET_HOURS[touch],
-        quando: fmt(scheduleTouch(touch, now)),
-        objetivo: OBJETIVO_TOQUE[touch],
-        midia: isMediaTouch(touch) ? (midia ? `${midia.media_type}: ${midia.url}` : "(slot vazio — só texto)") : "—",
+        toque: i + 1,
+        id: toque.id,
+        horas: Number(toque.delay_hours),
+        dia: rotuloDias(toque.delay_hours),
+        quando: fmt(scheduleTouch(toque, i + 1, now)),
+        objetivo: toque.objective,
+        midia: toque.media_url ? `${toque.media_kind}: ${toque.media_url}` : "(sem mídia — só texto)",
         ...(texto ? { mensagem: texto.texto, origem: texto.origem } : {}),
       });
     }
@@ -117,7 +114,7 @@ export async function GET(req: NextRequest) {
       simulacao: "considerando que o robô mandou a última mensagem agora e o lead não respondeu",
       ...(conversationId && !conversa ? { aviso: "conversa não encontrada — mostrando só a agenda" } : {}),
       cadencia: toques,
-      ao_encerrar: `tag "${TAG_PERDIDO}"`,
+      ao_encerrar: config.applyFinalTag ? `tag "${config.finalTag}"` : "(sem etiqueta — desligada no painel)",
       frases_fixas: {
         opt_out: copyOptOut(conversa?.contact?.name ?? null),
         handoff: MENSAGEM_HANDOFF,
@@ -133,8 +130,8 @@ export async function POST(req: NextRequest) {
   const action = req.nextUrl.searchParams.get("action");
 
   /**
-   * Dispara o toque atual da cadência AGORA, ignorando a janela de horário. Serve pra ver
-   * os 6 toques no mesmo dia em vez de esperar 9 dias. Manda WhatsApp DE VERDADE e avança
+   * Dispara o próximo toque da cadência AGORA, ignorando a janela de horário. Serve pra ver
+   * todos os toques no mesmo dia em vez de esperar 9 dias. Manda WhatsApp DE VERDADE e avança
    * o estado igual ao cron — por isso exige confirmar=1 além do token.
    */
   if (action === "regua-disparar") {

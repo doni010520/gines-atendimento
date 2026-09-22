@@ -7,7 +7,7 @@ Agente de IA para WhatsApp (imobiliária GINES) + painel de cadastro de imóveis
 - Banco Supabase **provisionado e com o schema aplicado** (projeto `gines-atendimento`, região `sa-east-1`).
 - Storage bucket `property-media` criado (upload de vídeo/PDF/fotos por imóvel).
 - Painel admin: login, cadastro/edição de imóvel com upload, inbox com fila de handoff.
-- Núcleo do agente: prompt em camadas, 6 tools (function calling), motor de follow-up (cadência de 6 toques em 24h/48h/96h/120h/168h/216h a partir da última mensagem do robô, e encerra), detecção de "promessa vazia", lock/dedup/debounce de mensagens.
+- Núcleo do agente: prompt em camadas, 6 tools (function calling), motor de follow-up (cadência de toques configurável em `/cadencia` — padrão 24h/48h/96h/120h/168h/216h a partir da última mensagem do robô — e encerra), detecção de "promessa vazia", lock/dedup/debounce de mensagens.
 - Webhook único da uazapi + endpoints de debug (protegidos, só funcionam com `DEBUG=true`).
 
 ## O que falta você me dar pra ele "ficar no ar" de verdade
@@ -74,7 +74,7 @@ As demais variáveis (`SUPABASE_SERVICE_ROLE_KEY`, `OPENAI_API_KEY`, `UAZAPI_*`,
 - **OpenAI** (`gpt-4.1-mini` por padrão, configurável via `OPENAI_MODEL`) — function calling, 6 tools: `buscar_imovel`, `focar_imovel`, `enviar_material`, `registrar_nome`, `transferir_para_humano`, `finalizar_atendimento`.
 ### Testar a cadência em minutos (em vez de 9 dias)
 
-Com `DEBUG=true` **e** `FOLLOWUP_TEST_GAP_MIN=2` no ambiente, a cadência ignora a janela de horário e o toque N sai N×2 minutos depois da última mensagem do robô. Batendo em `/api/cron?secret=...` a cada minuto, os 6 toques rodam em ~12 minutos pelo caminho real do cron. `GET /api/debug?action=regua-preview&conversationId=...` mostra a agenda e os textos que a IA geraria (sem enviar); `POST /api/debug?action=regua-disparar&confirmar=1` dispara o toque atual na hora.
+Com `DEBUG=true` **e** `FOLLOWUP_TEST_GAP_MIN=2` no ambiente, a cadência ignora a janela de horário e o k-ésimo toque ativo sai k×2 minutos depois da última mensagem do robô. Batendo em `/api/cron?secret=...` a cada minuto, a cadência inteira roda em poucos minutos pelo caminho real do cron. `GET /api/debug?action=regua-preview&conversationId=...` mostra a agenda e os textos que a IA geraria (sem enviar); `POST /api/debug?action=regua-disparar&confirmar=1` dispara o próximo toque na hora.
 
 As duas variáveis são exigidas juntas de propósito: em produção `DEBUG=false`, então a variável de teste esquecida no ambiente não faz nada. O valor é limitado a 1–60 minutos e cada rodada em modo de teste grava um `warn` em `app_logs`. A resposta do `/api/cron` traz `modo_teste` quando está ligado.
 
@@ -83,7 +83,7 @@ Outros dois atalhos de teste (também atrás de `DEBUG=true` + `DEBUG_TOKEN`):
 - `GET /api/debug?action=regua-preview&propertyId=...&nome=...` — mostra as 3 mensagens com o dado real do imóvel e quando cada uma sairia. Não envia nada.
 - `POST /api/debug?action=regua-disparar&confirmar=1` com `{ "conversationId": "..." }` — dispara o estágio atual na hora. **Manda WhatsApp de verdade**; recusa conversa com opt-out ou que já esteja com um humano.
 
-- **Motor de follow-up** — agendador interno (`src/instrumentation.ts`) chama o motor a cada 5 min. O relógio começa na última mensagem do robô sem resposta do lead; toques em **24h (texto+mídia) → 48h → 96h (texto+mídia) → 120h → 168h → 216h (ultimato+mídia)**, contados da âncora. Textos gerados pela IA a partir do histórico (com modelo fixo de reserva); mídias globais configuradas em `/cadencia`. Resposta do lead pausa; nova fala do robô recomeça do toque 1. Após o 6º toque a conversa ganha a tag "Perdido por Falta de Retorno". Janela 09h30–19h30 (domingo bloqueado). Resposta negativa dispara a despedida e trava a cadência (`opt_out`).
+- **Motor de follow-up** — agendador interno (`src/instrumentation.ts`) chama o motor a cada 5 min. O relógio começa na última mensagem do robô sem resposta do lead. **Os toques são editáveis em `/cadencia`** (tabela `followup_touches`, migração 0010): horas após a âncora, objetivo (instrução que a IA segue pra escrever o texto), texto de reserva (`{nome}` = primeiro nome), áudio/vídeo opcional e ativo/inativo. Padrão semeado: 24h (texto+mídia) → 48h → 96h (texto+mídia) → 120h → 168h → 216h (ultimato+mídia). A ordem é o número de horas; a conversa guarda as horas do último toque enviado (`followup_last_touch_hours`) e o próximo é sempre o primeiro toque ativo com mais horas — então editar a lista no meio da cadência não reenvia nada, e entre dois toques há sempre ≥1h (`followup_last_touch_at`). Resposta do lead pausa; nova fala do robô recomeça do primeiro toque. Após o último toque a conversa ganha a etiqueta final configurada no painel (padrão "Perdido por Falta de Retorno", pode ser desligada). Janela 09h30–19h30 (domingo bloqueado). Resposta negativa dispara a despedida e trava a cadência (`opt_out`).
 - **Handoff** — `transferir_para_humano` põe a conversa em `queued` e avisa o grupo da equipe; a IA continua respondendo até um corretor clicar "Assumir" no painel — só aí ela desliga pra aquela conversa.
 
 ## Fora do escopo desta v1 (decisão deliberada, pra manter direto)

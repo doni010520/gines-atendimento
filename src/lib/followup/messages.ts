@@ -2,7 +2,7 @@
  * Frases fixas do atendimento e os textos de reserva da cadência de follow-up.
  *
  * Os toques da cadência são escritos pela IA a partir do histórico (ver ./ai-copy.ts);
- * os modelos abaixo só saem quando a geração falha — por isso são genéricos de propósito,
+ * os textos de reserva (cadastrados por toque em /cadencia) só saem quando a geração falha — por isso são genéricos de propósito,
  * sem afirmar nada sobre o imóvel que possa não ser verdade.
  */
 
@@ -15,23 +15,16 @@ function vocativo(nome: string | null) {
   return primeiro ? `, ${primeiro}` : "";
 }
 
-/** Texto de reserva de cada toque (1..6), usado só se a IA falhar. */
-export function copyFallback(touch: number, nome: string | null): string {
-  const v = vocativo(nome);
-  switch (touch) {
-    case 1:
-      return `Oi${v}! Passando pra retomar nossa conversa sobre o imóvel. Ficou alguma dúvida que eu possa te ajudar?`;
-    case 2:
-      return `Oi${v}, tudo bem? Só queria saber se ainda faz sentido pra você seguirmos com o imóvel.`;
-    case 3:
-      return `Oi${v}! Essa semana a procura por esse imóvel está movimentada. Se quiser conhecer, me avisa que eu já organizo uma visita pra você.`;
-    case 4:
-      return `Oi${v}, ficou alguma coisa que não encaixou no que você procura? Me conta que eu te ajudo a achar uma opção melhor.`;
-    case 5:
-      return `Oi${v}! Ainda posso te ajudar com esse imóvel ou com outra opção? É só me responder por aqui.`;
-    default:
-      return `Oi${v}. Como não tive retorno, estou encerrando seu atendimento por aqui. Se quiser retomar a busca, é só me chamar — fico à disposição!`;
-  }
+/** Reserva quando o toque não tem texto próprio cadastrado. */
+const FALLBACK_GENERICO = "Oi{nome}! Passando pra saber se ainda posso te ajudar com o imóvel. É só me responder por aqui.";
+
+/**
+ * Texto de reserva do toque, usado só se a IA falhar. Vem do painel (/cadencia);
+ * `{nome}` vira ", Primeironome" (ou some, se não souber o nome).
+ */
+export function copyFallback(texto: string | null | undefined, nome: string | null): string {
+  const modelo = texto?.trim() || FALLBACK_GENERICO;
+  return modelo.replace(/\{nome\}/g, vocativo(nome));
 }
 
 /** Regra de ouro: resposta negativa encerra a cadência de vez. */

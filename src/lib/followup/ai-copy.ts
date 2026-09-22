@@ -3,23 +3,15 @@ import { MODEL, openaiClient } from "@/lib/ai/openai";
 import { logEvent } from "@/lib/log";
 import { copyFallback } from "./messages";
 import { greetingFor } from "./business-hours";
+import type { Toque } from "./touches";
 
 type Db = ReturnType<typeof createServiceClient>;
 
 /**
- * Objetivo de cada toque da cadência (spec do cliente). A IA escreve o texto a partir do
- * histórico real; aqui só vai a intenção — assim nenhum toque repete o anterior palavra
+ * O objetivo de cada toque é cadastrado em /cadencia. A IA escreve o texto a partir do
+ * histórico real; o painel só dá a intenção — assim nenhum toque repete o anterior palavra
  * por palavra e todos retomam o assunto de onde a conversa parou.
  */
-export const OBJETIVO_TOQUE: Record<number, string> = {
-  1: "Retomar o assunto exatamente de onde a conversa parou (cite o último ponto tratado), de forma leve, e convidar a pessoa a continuar.",
-  2: "Tentativa leve de contato: uma frase curta e simpática perguntando se a pessoa conseguiu ver a última mensagem ou se ainda tem interesse.",
-  3: "Escassez natural: mostrar que o imóvel tem procura e que vale não deixar pra depois (ex.: \"Temos visitas agendadas para este fim de semana...\"), convidando pra agendar uma visita. Sem pressão agressiva e sem inventar números.",
-  4: "Investigação: perguntar com curiosidade genuína se o imóvel não encaixou no perfil (ex.: \"A casa não encaixou no seu perfil?\") e se oferecer pra buscar algo mais adequado.",
-  5: "Penúltima tentativa de resgate: tom cordial, reforçar que está à disposição e fazer uma pergunta simples que seja fácil de responder.",
-  6: "Ultimato educado: avisar que, como não houve retorno, está encerrando o atendimento (ex.: \"Como não tive retorno, estou encerrando seu atendimento...\"), deixando a porta aberta pra pessoa chamar quando quiser.",
-};
-
 const HISTORICO_LIMITE = 20;
 
 /**
@@ -29,12 +21,16 @@ const HISTORICO_LIMITE = 20;
 export async function gerarTextoToque(params: {
   db: Db;
   conversationId: string;
-  touch: number;
+  /** Toque a escrever: objetivo (instrução pra IA) e texto de reserva vêm do painel. */
+  toque: Pick<Toque, "objective" | "fallback_text">;
+  /** Posição do toque na cadência ativa ("toque X de N"), só pra dar contexto à IA. */
+  indice: number;
+  total: number;
   nome: string | null;
   propertyId: string | null;
   now: Date;
 }): Promise<{ texto: string; origem: "ia" | "fallback" }> {
-  const { db, conversationId, touch, nome, propertyId, now } = params;
+  const { db, conversationId, toque, indice, total, nome, propertyId, now } = params;
   try {
     const { data: historico } = await db
       .from("messages")
@@ -76,7 +72,7 @@ export async function gerarTextoToque(params: {
     const system = [
       "Você é o assistente de atendimento de uma imobiliária, conversando pelo WhatsApp em português do Brasil.",
       "O cliente parou de responder. Escreva UMA mensagem de follow-up.",
-      `Objetivo desta mensagem (toque ${touch} de 6): ${OBJETIVO_TOQUE[touch] ?? OBJETIVO_TOQUE[6]}`,
+      `Objetivo desta mensagem (toque ${indice} de ${total}): ${toque.objective}`,
       "Regras:",
       "- Curta e natural, estilo WhatsApp: no máximo 2 ou 3 frases, sem parecer robô nem e-mail.",
       "- NÃO repita frases, aberturas ou perguntas que você já mandou no histórico.",
@@ -106,9 +102,9 @@ export async function gerarTextoToque(params: {
   } catch (err) {
     await logEvent("warn", "followup", "falha ao gerar texto do toque com IA — usando modelo fixo", {
       conversationId,
-      touch,
+      toque: indice,
       error: err instanceof Error ? err.message : String(err),
     });
-    return { texto: copyFallback(touch, nome), origem: "fallback" };
+    return { texto: copyFallback(toque.fallback_text, nome), origem: "fallback" };
   }
 }
