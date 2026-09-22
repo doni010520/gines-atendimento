@@ -38,6 +38,10 @@
 
   --color-mute-soft: #eef1f5;
 
+  /* Balão de saída do chat (verde WhatsApp suavizado) */
+  --color-bubble-out: #d9f2dc;
+  --color-bubble-out-ink: #14301f;
+
   --color-danger-soft: #fef3f2;
   --color-danger-ink: #b42318;
   --color-danger-edge: #f2c9c5;
@@ -88,5 +92,14 @@
     font-family: var(--font-mono);
     font-variant-numeric: tabular-nums;
     letter-spacing: -0.01em;
+  }
+}
+
+@layer components {
+  /* Fundo do chat: bege quente com pontilhado leve, na linha do WhatsApp */
+  .chat-wallpaper {
+    background-color: #f3efe7;
+    background-image: radial-gradient(rgba(138, 95, 20, 0.07) 1px, transparent 1px);
+    background-size: 18px 18px;
   }
 }

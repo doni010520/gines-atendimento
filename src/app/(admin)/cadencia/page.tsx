@@ -6,6 +6,7 @@ import { MEDIA_SLOT_LABEL, MEDIA_TOUCHES } from "@/lib/followup/media";
 import { TOUCH_OFFSET_HOURS } from "@/lib/followup/engine";
 import { OBJETIVO_TOQUE } from "@/lib/followup/ai-copy";
 import { dataHora } from "@/lib/ui/format";
+import { FilePicker } from "./FilePicker";
 import { removeFollowupMedia, saveFollowupMedia } from "./actions";
 
 export default async function CadenciaPage() {
@@ -29,7 +30,7 @@ export default async function CadenciaPage() {
             const midia = porToque.get(touch);
             const label = MEDIA_SLOT_LABEL[touch];
             return (
-              <Card key={touch} className="space-y-3 p-4">
+              <Card key={touch} className="flex h-full flex-col gap-3 p-4">
                 <div className="flex items-center justify-between gap-2">
                   <span className="text-sm font-semibold text-ink">{label.titulo}</span>
                   <Badge tone={midia ? "ok" : "mute"}>{midia ? (midia.media_type === "video" ? "Vídeo" : "Áudio") : "Só texto"}</Badge>
@@ -48,26 +49,21 @@ export default async function CadenciaPage() {
                   </p>
                 )}
 
-                <form action={saveFollowupMedia.bind(null, touch)} className="space-y-2">
-                  <input
-                    type="file"
-                    name="file"
-                    accept="audio/*,video/*"
-                    required
-                    className="block w-full text-xs text-ink-muted file:mr-3 file:rounded-md file:border-0 file:bg-primary-soft file:px-2.5 file:py-1.5 file:text-xs file:font-semibold file:text-primary-ink"
-                  />
-                  <FormSubmitButton pendingLabel="Enviando..." size="sm" block>
-                    {midia ? "Substituir arquivo" : "Enviar arquivo"}
-                  </FormSubmitButton>
-                </form>
-
-                {midia && (
-                  <form action={removeFollowupMedia.bind(null, touch)}>
-                    <FormSubmitButton pendingLabel="Removendo..." variant="danger" size="sm" block>
-                      Remover
+                <div className="mt-auto space-y-2 pt-1">
+                  {midia && (
+                    <form action={removeFollowupMedia.bind(null, touch)}>
+                      <FormSubmitButton pendingLabel="Removendo..." variant="danger" size="sm" block>
+                        Remover
+                      </FormSubmitButton>
+                    </form>
+                  )}
+                  <form action={saveFollowupMedia.bind(null, touch)} className="space-y-2">
+                    <FilePicker name="file" accept="audio/*,video/*" required />
+                    <FormSubmitButton pendingLabel="Enviando..." size="sm" block>
+                      {midia ? "Substituir arquivo" : "Enviar arquivo"}
                     </FormSubmitButton>
                   </form>
-                )}
+                </div>
               </Card>
             );
           })}
