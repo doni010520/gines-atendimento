@@ -41,29 +41,3 @@ export const PROPERTY_STATUS: Record<string, Entry> = {
 export function propertyStatus(status: string): Entry {
   return PROPERTY_STATUS[status] ?? PROPERTY_STATUS.ativo;
 }
-
-/**
- * Agrupamento do Inbox. O corretor abre o painel pra saber onde ele é
- * necessário — por isso `queued` vem primeiro e sozinho, em vez de afogado
- * na lista cronológica junto com o que o robô já está resolvendo.
- */
-export const INBOX_GROUPS = [
-  {
-    key: "urgente",
-    title: "Precisam de você",
-    empty: "Ninguém esperando. A fila está limpa.",
-    statuses: ["queued"],
-  },
-  {
-    key: "andamento",
-    title: "Em andamento",
-    empty: "Nenhuma conversa ativa.",
-    statuses: ["bot", "open"],
-  },
-  {
-    key: "encerradas",
-    title: "Encerradas",
-    empty: null,
-    statuses: ["closed"],
-  },
-] as const;

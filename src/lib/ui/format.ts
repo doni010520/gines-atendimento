@@ -84,3 +84,41 @@ export function esperando(iso: string | null | undefined): string | null {
 export function preco(valor: number | null | undefined): string {
   return valor == null ? "—" : brl.format(valor);
 }
+
+/** "14:32" — hora do balão; o dia fica no separador. */
+export function hora(iso: string | null | undefined): string {
+  if (!iso) return "";
+  const d = new Date(iso);
+  return Number.isNaN(d.getTime()) ? "" : hhmm.format(d);
+}
+
+/** Chave do dia (`aaaa-mm-dd`, fuso SP) para agrupar mensagens. */
+export function chaveDia(iso: string): string {
+  const d = new Date(iso);
+  return Number.isNaN(d.getTime()) ? "" : diaEm(d);
+}
+
+/** Rótulo do separador de dia: "Hoje", "Ontem" ou "12/08/2026". */
+export function rotuloDia(iso: string): string {
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return "";
+  const agora = new Date();
+  const dia = diaEm(d);
+  if (dia === diaEm(agora)) return "Hoje";
+  if (dia === diaEm(new Date(agora.getTime() - 86_400_000))) return "Ontem";
+  return new Intl.DateTimeFormat("pt-BR", { dateStyle: "short", timeZone: TZ }).format(d);
+}
+
+/** Iniciais para o avatar: "Maria Souza" → "MS"; sem nome, os 2 últimos dígitos. */
+export function iniciais(nome: string | null | undefined, telefone?: string | null): string {
+  const partes = (nome ?? "").trim().split(/\s+/).filter(Boolean);
+  if (partes.length === 0) return (telefone ?? "").replace(/\D/g, "").slice(-2) || "?";
+  const primeira = partes[0][0] ?? "";
+  const ultima = partes.length > 1 ? (partes[partes.length - 1][0] ?? "") : "";
+  return (primeira + ultima).toUpperCase();
+}
+
+/** Texto de sistema como "[PDF do imóvel enviado]" — vira chip em vez de balão comum. */
+export function ehMarcadorDeMidia(body: string | null | undefined): boolean {
+  return !!body && /^\[[^\]]{1,80}\]$/.test(body.trim());
+}

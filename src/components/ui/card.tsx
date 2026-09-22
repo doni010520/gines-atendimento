@@ -35,18 +35,3 @@ export function PageHeader({
     </div>
   );
 }
-
-/**
- * Cabeçalho de grupo dentro de uma lista (Inbox). O contador fica ao lado do
- * título porque a pergunta do corretor é "quantos me esperam?", não "quais".
- */
-export function GroupHeader({ title, count }: { title: string; count: number }) {
-  return (
-    <div className="flex items-baseline gap-2 px-1 pb-2">
-      <h2 className="text-[10px] font-extrabold tracking-[0.09em] text-primary uppercase">
-        {title}
-      </h2>
-      <span className="tabular text-[10px] text-ink-subtle">{count}</span>
-    </div>
-  );
-}
