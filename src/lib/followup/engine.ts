@@ -1,76 +1,108 @@
+import type { SupabaseClient } from "@supabase/supabase-js";
+import type { Database } from "@/lib/supabase/database.types";
 import { createServiceClient } from "@/lib/supabase/service";
 import { sendMedia, sendText } from "@/lib/whatsapp/uazapi";
 import { isWithinWindow, modoTesteGapMs, nextAllowedTime } from "./business-hours";
 import { gerarTextoToque } from "./ai-copy";
-import { isMediaTouch } from "./media";
+import {
+  carregarConfig,
+  carregarToquesAtivos,
+  indiceDoToque,
+  proximoToque,
+  type ConfigCadencia,
+  type Toque,
+} from "./touches";
 import { logEvent } from "@/lib/log";
 
 /**
- * Cadência de follow-up (spec do cliente, 09/26).
+ * Cadência de follow-up — toques configurados no painel (/cadencia, tabela followup_touches).
  *
  * O relógio começa na ÚLTIMA mensagem do robô sem resposta do lead (a "âncora"). Qualquer
- * resposta do lead para tudo; a próxima resposta do robô recomeça do toque 1, ancorada nela.
+ * resposta do lead para tudo; a próxima resposta do robô recomeça do primeiro toque.
  *
- *   toque 1 = 24h   texto (retoma de onde parou) + áudio/vídeo
- *   toque 2 = 48h   texto (tentativa leve)
- *   toque 3 = 96h   texto (escassez) + áudio/vídeo
- *   toque 4 = 120h  texto (investigação)
- *   toque 5 = 168h  texto (penúltima tentativa)
- *   toque 6 = 216h  texto (ultimato) + áudio/vídeo -> tag "Perdido por Falta de Retorno" e fim
+ * Cada toque sai `delay_hours` depois da âncora — atraso num toque (janela de horário, cron
+ * parado) não empurra os seguintes. A ordem é o delay. Depois do último toque ativo a
+ * conversa recebe a etiqueta final (se ligada no painel) e a cadência encerra.
  *
- * As horas contam a partir da âncora, não do toque anterior — atraso num toque (janela de
- * horário, cron parado) não empurra os seguintes.
+ * Estado na conversa:
+ *   followup_stage             0 = parada; 1 = rodando; STAGE_DONE = encerrada
+ *   followup_last_touch_hours  horas do último toque enviado (0 = nenhum)
+ *   followup_last_touch_at     quando ele saiu (piso de 1h pro próximo)
+ *   followup_next_touch_id     toque agendado (informativo — recalculado ao enviar)
  *
- * followup_stage: 0 = parada; 1..6 = próximo toque a enviar; STAGE_DONE = encerrada.
+ * O próximo toque é sempre recalculado da lista ATUAL ("primeiro ativo com delay maior que o
+ * último enviado"), então editar a cadência no meio não reenvia nada nem volta atrás.
  */
 
-export const TOUCH_OFFSET_HOURS: Record<number, number> = { 1: 24, 2: 48, 3: 96, 4: 120, 5: 168, 6: 216 };
-export const LAST_TOUCH = 6;
+export const STAGE_STOPPED = 0;
+export const STAGE_RUNNING = 1;
 export const STAGE_DONE = 7;
-export const TAG_PERDIDO = "Perdido por Falta de Retorno";
 
 /**
- * Piso entre dois toques. Se o cron ficou parado e vários toques venceram juntos, eles
- * saem espaçados em vez de em rajada — o lead não recebe três mensagens no mesmo minuto.
+ * Piso entre dois toques. Se o cron ficou parado, ou o painel encurtou as horas, e vários
+ * toques venceram juntos, eles saem espaçados em vez de em rajada.
  */
 const MIN_GAP_BETWEEN_TOUCHES_MS = 60 * 60 * 1000;
 
+/** Tolerância do "já venceu?" — evita reagendar por diferença de segundos. */
+const FOLGA_MS = 60 * 1000;
+
 const BATCH_SIZE = 20;
 
-type Db = ReturnType<typeof createServiceClient>;
+type Db = SupabaseClient<Database>;
+
+function gapMinimoMs() {
+  return Math.min(MIN_GAP_BETWEEN_TOUCHES_MS, modoTesteGapMs() ?? Infinity);
+}
 
 /**
  * Quando o toque deve sair, dada a âncora. Já aplica a janela de horário (fora dela, adia
- * pra próxima abertura) e o piso `notBefore`. No modo de teste, o toque N sai N×gap depois
- * da âncora e a janela é ignorada.
+ * pra próxima abertura) e o piso `notBefore`. No modo de teste, o toque de posição k sai
+ * k×gap depois da âncora e a janela é ignorada.
  */
-export function scheduleTouch(touch: number, anchor: Date, notBefore?: Date): Date | null {
-  const horas = TOUCH_OFFSET_HOURS[touch];
-  if (horas === undefined) return null;
-
+export function scheduleTouch(toque: Pick<Toque, "delay_hours">, indice: number, anchor: Date, notBefore?: Date | null): Date {
   const gapTeste = modoTesteGapMs();
   if (gapTeste !== null) {
-    const at = new Date(anchor.getTime() + touch * gapTeste);
+    const at = new Date(anchor.getTime() + Math.max(1, indice) * gapTeste);
     return notBefore && at < notBefore ? notBefore : at;
   }
 
-  let at = new Date(anchor.getTime() + horas * 60 * 60 * 1000);
+  let at = new Date(anchor.getTime() + Number(toque.delay_hours) * 60 * 60 * 1000);
   if (notBefore && at < notBefore) at = notBefore;
   return nextAllowedTime(at);
 }
 
+/** Piso do próximo toque: 1h (ou o gap do modo teste) depois do último enviado. */
+function pisoDepoisDe(ultimoEnvio: string | null): Date | null {
+  return ultimoEnvio ? new Date(new Date(ultimoEnvio).getTime() + gapMinimoMs()) : null;
+}
+
 /**
- * Robô acabou de falar: (re)começa a cadência do toque 1 ancorada nessa mensagem.
+ * Robô acabou de falar: (re)começa a cadência do primeiro toque ancorada nessa mensagem.
  * Só vale pra conversa do robô, com IA ligada e sem opt-out — o mesmo filtro do cron.
  */
 export async function iniciarCadencia(db: Db, conversationId: string, anchor: Date) {
-  const primeiro = scheduleTouch(1, anchor);
+  let primeiro: Toque | null = null;
+  try {
+    primeiro = (await carregarToquesAtivos(db))[0] ?? null;
+  } catch (err) {
+    await logEvent("error", "followup", "falha ao iniciar cadência", {
+      conversationId,
+      error: err instanceof Error ? err.message : String(err),
+    });
+    return;
+  }
+
   const { error } = await db
     .from("conversations")
     .update({
       followup_anchor_at: anchor.toISOString(),
-      followup_stage: 1,
-      next_followup_at: primeiro?.toISOString() ?? null,
+      // sem nenhum toque ativo no painel, não há cadência pra rodar
+      followup_stage: primeiro ? STAGE_RUNNING : STAGE_STOPPED,
+      followup_last_touch_hours: 0,
+      followup_last_touch_at: null,
+      followup_next_touch_id: primeiro?.id ?? null,
+      next_followup_at: primeiro ? scheduleTouch(primeiro, 1, anchor).toISOString() : null,
     })
     .eq("id", conversationId)
     .eq("status", "bot")
@@ -85,11 +117,19 @@ export async function iniciarCadencia(db: Db, conversationId: string, anchor: Da
 export async function pararCadencia(db: Db, conversationId: string) {
   await db
     .from("conversations")
-    .update({ followup_stage: 0, next_followup_at: null, followup_anchor_at: null })
+    .update({
+      followup_stage: STAGE_STOPPED,
+      next_followup_at: null,
+      followup_anchor_at: null,
+      followup_last_touch_hours: 0,
+      followup_last_touch_at: null,
+      followup_next_touch_id: null,
+    })
     .eq("id", conversationId);
 }
 
-const DUE_COLUMNS = "id,contact_id,property_id,followup_stage,followup_anchor_at,tags,bot_lock_until";
+const DUE_COLUMNS =
+  "id,contact_id,property_id,followup_stage,followup_anchor_at,followup_last_touch_hours,followup_last_touch_at,tags,bot_lock_until";
 
 type DueConversation = {
   id: string;
@@ -97,6 +137,8 @@ type DueConversation = {
   property_id: string | null;
   followup_stage: number;
   followup_anchor_at: string | null;
+  followup_last_touch_hours: number;
+  followup_last_touch_at: string | null;
   tags: string[];
   bot_lock_until: string | null;
 };
@@ -115,8 +157,7 @@ export async function runFollowupEngine() {
     .eq("status", "bot")
     .eq("ai_enabled", true)
     .eq("opt_out", false)
-    .gte("followup_stage", 1)
-    .lte("followup_stage", LAST_TOUCH)
+    .eq("followup_stage", STAGE_RUNNING)
     .lte("next_followup_at", nowIso)
     .limit(BATCH_SIZE);
 
@@ -125,6 +166,17 @@ export async function runFollowupEngine() {
     return { processed: 0, sent: 0 };
   }
   if (!due || due.length === 0) return { processed: 0, sent: 0 };
+
+  let toques: Toque[];
+  let config: ConfigCadencia;
+  try {
+    [toques, config] = await Promise.all([carregarToquesAtivos(db), carregarConfig(db)]);
+  } catch (err) {
+    await logEvent("error", "followup", "falha ao carregar a configuração da cadência", {
+      error: err instanceof Error ? err.message : String(err),
+    });
+    return { processed: 0, sent: 0 };
+  }
 
   const gapTeste = modoTesteGapMs();
   if (gapTeste !== null) {
@@ -138,7 +190,7 @@ export async function runFollowupEngine() {
   let sent = 0;
   for (const conv of due) {
     try {
-      if (await processOne(db, conv)) sent++;
+      if (await processOne(db, conv, toques, config)) sent++;
       processed++;
     } catch (err) {
       await logEvent("error", "followup", "falha ao processar follow-up", {
@@ -151,7 +203,7 @@ export async function runFollowupEngine() {
 }
 
 /** @returns true se o toque foi enviado de fato (false = só reagendou/parou). */
-async function processOne(db: Db, conv: DueConversation): Promise<boolean> {
+async function processOne(db: Db, conv: DueConversation, toques: Toque[], config: ConfigCadencia): Promise<boolean> {
   const now = new Date();
 
   // agente respondendo nesse instante: deixa pra próxima rodada, ele vai reancorar a cadência
@@ -167,7 +219,7 @@ async function processOne(db: Db, conv: DueConversation): Promise<boolean> {
     return false;
   }
 
-  const resultado = await enviarToque(db, conv, now);
+  const resultado = await enviarToque(db, conv, now, toques, config, { forcar: false });
   return resultado.enviado;
 }
 
@@ -175,6 +227,8 @@ export type ResultadoEnvio = {
   enviado: boolean;
   motivo?: string;
   toque?: number;
+  total?: number;
+  horas?: number;
   mensagem?: string;
   origemTexto?: "ia" | "fallback";
   midia?: { tipo: string; url: string } | null;
@@ -182,14 +236,59 @@ export type ResultadoEnvio = {
   encerrada?: boolean;
 };
 
+/** Encerra a cadência: marca como encerrada e põe a etiqueta final, se ligada no painel. */
+async function encerrar(db: Db, conv: DueConversation, config: ConfigCadencia, extra: Record<string, unknown> = {}) {
+  const tags = config.applyFinalTag ? Array.from(new Set([...(conv.tags ?? []), config.finalTag])) : conv.tags;
+  await db
+    .from("conversations")
+    .update({ followup_stage: STAGE_DONE, next_followup_at: null, followup_next_touch_id: null, tags, ...extra })
+    .eq("id", conv.id);
+  await logEvent("info", "followup", "cadência encerrada sem retorno", {
+    conversationId: conv.id,
+    etiqueta: config.applyFinalTag ? config.finalTag : null,
+  });
+}
+
 /**
- * Gera o texto do toque atual, envia (texto + mídia do slot, se houver) e avança o estado.
+ * Gera o texto do próximo toque, envia (texto + mídia do toque, se houver) e avança o estado.
  * Único ponto que manda follow-up — o cron e o disparo manual de teste passam os dois por
  * aqui, senão o teste validaria um caminho que a produção não usa.
+ *
+ * `forcar` (só o disparo de teste) manda mesmo que a lista tenha sido editada e o toque
+ * ainda não tenha vencido.
  */
-async function enviarToque(db: Db, conv: DueConversation, now: Date): Promise<ResultadoEnvio> {
-  const touch = conv.followup_stage;
-  if (TOUCH_OFFSET_HOURS[touch] === undefined) return { enviado: false, motivo: "estágio fora da cadência" };
+async function enviarToque(
+  db: Db,
+  conv: DueConversation,
+  now: Date,
+  toques: Toque[],
+  config: ConfigCadencia,
+  { forcar }: { forcar: boolean }
+): Promise<ResultadoEnvio> {
+  if (!conv.followup_anchor_at) {
+    await pararCadencia(db, conv.id);
+    return { enviado: false, motivo: "conversa sem âncora — cadência parada" };
+  }
+  const anchor = new Date(conv.followup_anchor_at);
+
+  const toque = proximoToque(toques, conv.followup_last_touch_hours);
+  if (!toque) {
+    // o painel removeu/desativou os toques que faltavam: acabou a cadência
+    await encerrar(db, conv, config);
+    return { enviado: false, motivo: "não há mais toques ativos depois do último enviado — cadência encerrada", encerrada: true };
+  }
+  const indice = indiceDoToque(toques, toque.id);
+
+  // a lista pode ter mudado desde o agendamento (horas aumentadas, toque trocado): recalcula
+  // a partir da âncora e, se ainda não venceu, só reagenda
+  const devido = scheduleTouch(toque, indice, anchor, pisoDepoisDe(conv.followup_last_touch_at));
+  if (!forcar && devido.getTime() > now.getTime() + FOLGA_MS) {
+    await db
+      .from("conversations")
+      .update({ next_followup_at: devido.toISOString(), followup_next_touch_id: toque.id })
+      .eq("id", conv.id);
+    return { enviado: false, motivo: "cadência editada — toque reagendado", proximo: devido.toISOString() };
+  }
 
   // defesa: se a última mensagem visível é do lead, a cadência não devia estar rodando
   const { data: ultima } = await db
@@ -200,7 +299,7 @@ async function enviarToque(db: Db, conv: DueConversation, now: Date): Promise<Re
     .order("created_at", { ascending: false })
     .limit(1)
     .maybeSingle();
-  if (!ultima || ultima.direction === "in" || !conv.followup_anchor_at) {
+  if (!ultima || ultima.direction === "in") {
     await pararCadencia(db, conv.id);
     return { enviado: false, motivo: "lead respondeu depois da última mensagem do robô — cadência parada" };
   }
@@ -211,7 +310,9 @@ async function enviarToque(db: Db, conv: DueConversation, now: Date): Promise<Re
   const { texto, origem } = await gerarTextoToque({
     db,
     conversationId: conv.id,
-    touch,
+    toque,
+    indice,
+    total: toques.length,
     nome: contact.name,
     propertyId: conv.property_id,
     now,
@@ -222,65 +323,90 @@ async function enviarToque(db: Db, conv: DueConversation, now: Date): Promise<Re
   await db.from("messages").insert({ conversation_id: conv.id, direction: "out", body: texto, is_internal: false });
 
   let midia: ResultadoEnvio["midia"] = null;
-  if (isMediaTouch(touch)) {
-    const { data: slot } = await db.from("followup_media").select("media_type,url").eq("touch", touch).maybeSingle();
-    if (slot) {
-      try {
-        // áudio vai como "ptt" pra chegar como mensagem de voz, não como arquivo
-        await sendMedia({ number: contact.phone, type: slot.media_type === "video" ? "video" : "ptt", file: slot.url });
-        await db.from("messages").insert({
-          conversation_id: conv.id,
-          direction: "out",
-          body: slot.media_type === "video" ? "[vídeo da cadência enviado]" : "[áudio da cadência enviado]",
-          media_url: slot.url,
-          media_type: slot.media_type,
-          is_internal: false,
-        });
-        midia = { tipo: slot.media_type, url: slot.url };
-      } catch (err) {
-        // o texto já foi — falha na mídia não trava a cadência
-        await logEvent("error", "followup", "falha ao enviar mídia do toque", {
-          conversationId: conv.id,
-          touch,
-          error: err instanceof Error ? err.message : String(err),
-        });
-      }
+  if (toque.media_url && toque.media_kind) {
+    try {
+      // áudio vai como "ptt" pra chegar como mensagem de voz, não como arquivo
+      await sendMedia({ number: contact.phone, type: toque.media_kind === "video" ? "video" : "ptt", file: toque.media_url });
+      await db.from("messages").insert({
+        conversation_id: conv.id,
+        direction: "out",
+        body: toque.media_kind === "video" ? "[vídeo da cadência enviado]" : "[áudio da cadência enviado]",
+        media_url: toque.media_url,
+        media_type: toque.media_kind,
+        is_internal: false,
+      });
+      midia = { tipo: toque.media_kind, url: toque.media_url };
+    } catch (err) {
+      // o texto já foi — falha na mídia não trava a cadência
+      await logEvent("error", "followup", "falha ao enviar mídia do toque", {
+        conversationId: conv.id,
+        toque: indice,
+        error: err instanceof Error ? err.message : String(err),
+      });
     }
   }
 
-  const encerrada = touch >= LAST_TOUCH;
-  const piso = new Date(now.getTime() + Math.min(MIN_GAP_BETWEEN_TOUCHES_MS, modoTesteGapMs() ?? Infinity));
-  const proximo = encerrada ? null : scheduleTouch(touch + 1, new Date(conv.followup_anchor_at), piso);
+  const seguinte = proximoToque(toques, toque.delay_hours);
+  const estadoEnviado = {
+    followup_last_touch_hours: Number(toque.delay_hours),
+    followup_last_touch_at: now.toISOString(),
+    last_message_at: now.toISOString(),
+  };
 
-  await db
-    .from("conversations")
-    .update({
-      followup_stage: encerrada || !proximo ? STAGE_DONE : touch + 1,
-      next_followup_at: proximo?.toISOString() ?? null,
-      last_message_at: now.toISOString(),
-      ...(encerrada ? { tags: Array.from(new Set([...(conv.tags ?? []), TAG_PERDIDO])) } : {}),
-    })
-    .eq("id", conv.id);
-
-  if (encerrada) {
-    await logEvent("info", "followup", "cadência encerrada sem retorno — conversa marcada como perdida", {
-      conversationId: conv.id,
-    });
+  let proximo: Date | null = null;
+  if (seguinte) {
+    proximo = scheduleTouch(seguinte, indice + 1, anchor, new Date(now.getTime() + gapMinimoMs()));
+    await db
+      .from("conversations")
+      .update({ ...estadoEnviado, followup_next_touch_id: seguinte.id, next_followup_at: proximo.toISOString() })
+      .eq("id", conv.id);
+  } else {
+    await encerrar(db, conv, config, estadoEnviado);
   }
 
   return {
     enviado: true,
-    toque: touch,
+    toque: indice,
+    total: toques.length,
+    horas: Number(toque.delay_hours),
     mensagem: texto,
     origemTexto: origem,
     midia,
     proximo: proximo?.toISOString() ?? null,
-    encerrada,
+    encerrada: !seguinte,
   };
 }
 
 /**
- * Dispara o toque atual AGORA, ignorando a janela de horário — só pra teste.
+ * Painel mudou a lista de toques: recalcula o próximo toque e o horário de toda conversa com
+ * cadência rodando, a partir da âncora. Não envia nada — toque que ficou "vencido" sai na
+ * próxima rodada do cron, respeitando o piso de 1h desde o último envio (sem rajada).
+ */
+export async function reagendarCadencias(db: Db) {
+  const toques = await carregarToquesAtivos(db);
+  const { data: rodando, error } = await db
+    .from("conversations")
+    .select("id,followup_anchor_at,followup_last_touch_hours,followup_last_touch_at")
+    .eq("followup_stage", STAGE_RUNNING);
+  if (error) throw new Error(error.message);
+
+  for (const conv of rodando ?? []) {
+    if (!conv.followup_anchor_at) continue;
+    const toque = proximoToque(toques, conv.followup_last_touch_hours);
+    // sem próximo: deixa vencer agora, o cron encerra e põe a etiqueta pelo caminho normal
+    const quando = toque
+      ? scheduleTouch(toque, indiceDoToque(toques, toque.id), new Date(conv.followup_anchor_at), pisoDepoisDe(conv.followup_last_touch_at))
+      : new Date();
+    await db
+      .from("conversations")
+      .update({ followup_next_touch_id: toque?.id ?? null, next_followup_at: quando.toISOString() })
+      .eq("id", conv.id);
+  }
+  return (rodando ?? []).length;
+}
+
+/**
+ * Dispara o próximo toque AGORA, ignorando a janela de horário — só pra teste.
  * Manda WhatsApp de verdade e avança o estado igual ao cron, por isso vive atrás do
  * /api/debug (DEBUG=true + token + confirmação explícita).
  */
@@ -301,15 +427,16 @@ export async function dispararToqueAgora(db: Db, conversationId: string): Promis
       motivo: `conversa está em "${conv.status}" com IA ${conv.ai_enabled ? "ligada" : "desligada"} — o cron também não tocaria nela. Devolva pro robô no painel se quiser testar aqui.`,
     };
   }
-  if (conv.followup_stage < 1 || conv.followup_stage > LAST_TOUCH) {
+  if (conv.followup_stage !== STAGE_RUNNING) {
     return {
       enviado: false,
       motivo:
         conv.followup_stage >= STAGE_DONE
-          ? "cadência já encerrada (o toque 6 foi o último)"
+          ? "cadência já encerrada (o último toque já saiu)"
           : "cadência parada — o robô precisa ter falado por último (sem resposta do lead)",
     };
   }
 
-  return enviarToque(db, conv, new Date());
+  const [toques, config] = await Promise.all([carregarToquesAtivos(db), carregarConfig(db)]);
+  return enviarToque(db, conv, new Date(), toques, config, { forcar: true });
 }

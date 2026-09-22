@@ -12,8 +12,8 @@ import { Badge } from "@/components/ui/badge";
 import { IconBack, IconHandRaised } from "@/components/icons";
 import { conversationStatus } from "@/lib/ui/status";
 import { dataHora, esperando, iniciais, preco } from "@/lib/ui/format";
-
-const TOTAL_TOQUES = 6;
+import { STAGE_DONE, STAGE_RUNNING } from "@/lib/followup/engine";
+import { proximoToque } from "@/lib/followup/touches";
 
 /** Procura (até 4 níveis) o primeiro texto sob uma das chaves — o formato do `raw` varia por origem. */
 function acharTexto(raw: Json | undefined, chaves: string[], nivel = 0): string | null {
@@ -57,6 +57,22 @@ export default async function ConversationPage({ params }: { params: Promise<{ i
     .eq("id", id)
     .maybeSingle();
   if (!conversation) notFound();
+
+  const { data: toquesAtivos } = await supabase
+    .from("followup_touches")
+    .select("*")
+    .eq("active", true)
+    .order("delay_hours")
+    .order("position");
+  const toques = toquesAtivos ?? [];
+  const proximo =
+    conversation.followup_stage === STAGE_RUNNING ? proximoToque(toques, conversation.followup_last_touch_hours) : null;
+  const etapaFollowup =
+    conversation.followup_stage === STAGE_DONE
+      ? "Encerrada"
+      : proximo
+        ? `Toque ${toques.indexOf(proximo) + 1} de ${toques.length}`
+        : "Parada";
 
   const [{ data: messages }, { data: referral }] = await Promise.all([
     supabase
@@ -186,15 +202,15 @@ export default async function ConversationPage({ params }: { params: Promise<{ i
       <Secao titulo="Follow-up">
         <Linha
           rotulo="Etapa"
-          valor={
-            <span className="tabular">
-              {conversation.followup_stage}/{TOTAL_TOQUES}
-            </span>
-          }
+          valor={<span className="tabular">{etapaFollowup}</span>}
         />
         <Linha
           rotulo="Próximo toque"
-          valor={<span className="tabular">{conversation.next_followup_at ? dataHora(conversation.next_followup_at) : "—"}</span>}
+          valor={
+            <span className="tabular">
+              {proximo && conversation.next_followup_at ? dataHora(conversation.next_followup_at) : "—"}
+            </span>
+          }
         />
         <Linha
           rotulo="Âncora"
