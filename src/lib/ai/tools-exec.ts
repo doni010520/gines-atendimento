@@ -228,7 +228,9 @@ async function toolTransferirParaHumano(ctx: ToolContext, args: Record<string, u
 
       const linhas = [
         `📥 *${MOTIVO_LABEL[motivo] ?? motivo}*`,
-        `Cliente: ${contact?.name ?? "sem nome"} — ${contact?.phone}`,
+        `Cliente: ${contact?.name ?? "sem nome"}`,
+        // link wa.me: um toque no grupo já abre a conversa com a pessoa
+        contact?.phone ? `Conversar: https://wa.me/${contact.phone.replace(/\D/g, "")}` : "",
         property
           ? `Imóvel: ${property.title} — ${[property.address, property.neighborhood, property.city].filter(Boolean).join(", ")}`
           : `Imóvel: não identificado ainda`,
