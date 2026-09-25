@@ -1,3 +1,5 @@
+import { AGENT_DEFAULTS } from "@/lib/ai/agent-settings";
+
 /**
  * Frases fixas do atendimento e os textos de reserva da cadência de follow-up.
  *
@@ -28,10 +30,9 @@ export function copyFallback(texto: string | null | undefined, nome: string | nu
 }
 
 /** Regra de ouro: resposta negativa encerra a cadência de vez. */
-export function copyOptOut(nome: string | null): string {
-  return `Agradeço o retorno${vocativo(nome)}! Se precisar de algo no futuro, estarei à disposição. Um excelente dia!`;
+export function copyOptOut(nome: string | null, modelo = AGENT_DEFAULTS.optoutMessage): string {
+  return modelo.replace(/\{nome\}/g, vocativo(nome));
 }
 
-/** Frase fixa de transbordo — a IA não improvisa essa. */
-export const MENSAGEM_HANDOFF =
-  "Excelente! Vou chamar o Gines agora mesmo para assumir o atendimento e alinhar esse detalhe diretamente com você. Um momento, por favor.";
+/** Frase padrão; a vigente é a de /agente (agent_settings.handoff_message). */
+export const MENSAGEM_HANDOFF = AGENT_DEFAULTS.handoffMessage;

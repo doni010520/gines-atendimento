@@ -2,7 +2,8 @@ import { createServiceClient } from "@/lib/supabase/service";
 import { sendText, sendMedia } from "@/lib/whatsapp/uazapi";
 import { logEvent } from "@/lib/log";
 import { STAGE_DONE } from "@/lib/followup/engine";
-import { copyOptOut, MENSAGEM_HANDOFF } from "@/lib/followup/messages";
+import { copyOptOut } from "@/lib/followup/messages";
+import { carregarAgente } from "./agent-settings";
 
 type Db = ReturnType<typeof createServiceClient>;
 
@@ -252,7 +253,7 @@ async function toolTransferirParaHumano(ctx: ToolContext, args: Record<string, u
 
   return {
     ok: true,
-    mensagem_para_o_cliente: MENSAGEM_HANDOFF,
+    mensagem_para_o_cliente: (await carregarAgente(ctx.db)).handoffMessage,
     instrucao: "responda ao cliente EXATAMENTE com mensagem_para_o_cliente, sem acrescentar nada",
   };
 }
@@ -266,7 +267,7 @@ async function toolFinalizarAtendimento(ctx: ToolContext, args: Record<string, u
   const motivo = typeof args.motivo === "string" ? args.motivo : "nao_interessado";
 
   const { data: contact } = await ctx.db.from("contacts").select("name").eq("id", ctx.contactId).single();
-  const despedida = copyOptOut(contact?.name ?? null);
+  const despedida = copyOptOut(contact?.name ?? null, (await carregarAgente(ctx.db)).optoutMessage);
 
   await ctx.db
     .from("conversations")

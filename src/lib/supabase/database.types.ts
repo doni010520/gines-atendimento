@@ -259,6 +259,45 @@ export type Database = {
         }
         Relationships: []
       }
+      agent_settings: {
+        Row: {
+          id: boolean
+          assistant_name: string | null
+          identity: string | null
+          ai_disclosure: string | null
+          tone: string | null
+          greeting: string | null
+          handoff_message: string | null
+          optout_message: string | null
+          extra_instructions: string | null
+          updated_at: string
+        }
+        Insert: {
+          id?: boolean
+          assistant_name?: string | null
+          identity?: string | null
+          ai_disclosure?: string | null
+          tone?: string | null
+          greeting?: string | null
+          handoff_message?: string | null
+          optout_message?: string | null
+          extra_instructions?: string | null
+          updated_at?: string
+        }
+        Update: {
+          id?: boolean
+          assistant_name?: string | null
+          identity?: string | null
+          ai_disclosure?: string | null
+          tone?: string | null
+          greeting?: string | null
+          handoff_message?: string | null
+          optout_message?: string | null
+          extra_instructions?: string | null
+          updated_at?: string
+        }
+        Relationships: []
+      }
       followup_settings: {
         Row: {
           id: boolean

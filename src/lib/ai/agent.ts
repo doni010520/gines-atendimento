@@ -2,6 +2,7 @@ import OpenAI from "openai";
 import type { ChatCompletionMessageParam, ChatCompletionMessageToolCall } from "openai/resources/chat/completions";
 import { createServiceClient } from "@/lib/supabase/service";
 import { buildSystemPrompt } from "./prompt";
+import { carregarAgente } from "./agent-settings";
 import { TOOLS } from "./tools";
 import { executeTool, type ToolContext } from "./tools-exec";
 import { sendText } from "@/lib/whatsapp/uazapi";
@@ -114,6 +115,7 @@ export async function runAgentTurn(conversationId: string) {
       totalActiveProperties: totalActiveProperties ?? 0,
       visitOffersCount: conversation.visit_offers_count,
       nowIso: new Date().toISOString(),
+      agent: await carregarAgente(db),
     });
 
     const messages: ChatCompletionMessageParam[] = [
