@@ -40,6 +40,8 @@ async function uazRequest(path: string, body: Record<string, unknown>, attempt =
 
 /** Normaliza telefone BR pro formato que a uazapi espera (DDI+DDD+número, sem símbolos). */
 export function normalizePhone(raw: string): string {
+  // JID de grupo (@g.us) ou completo: tirar os não-dígitos apagaria o sufixo e a uazapi trataria como telefone
+  if (raw.includes("@")) return raw.trim();
   return raw.replace(/\D/g, "");
 }
 
