@@ -226,20 +226,21 @@ async function toolTransferirParaHumano(ctx: ToolContext, args: Record<string, u
         ? await ctx.db.from("properties").select("title,address,neighborhood,city").eq("id", ctx.propertyId).maybeSingle()
         : { data: null };
 
-      const linhas = [
+      const endereco = property
+        ? [property.address, property.neighborhood, property.city].filter(Boolean).join(", ")
+        : "";
+      // blocos separados por linha em branco, rótulos em negrito (*...* no WhatsApp)
+      const blocos = [
         `📥 *${MOTIVO_LABEL[motivo] ?? motivo}*`,
-        `Cliente: ${contact?.name ?? "sem nome"}`,
+        `*Cliente:* ${contact?.name ?? "sem nome"}`,
         // link wa.me: um toque no grupo já abre a conversa com a pessoa
-        contact?.phone ? `Conversar: https://wa.me/${contact.phone.replace(/\D/g, "")}` : "",
-        property
-          ? `Imóvel: ${property.title} — ${[property.address, property.neighborhood, property.city].filter(Boolean).join(", ")}`
-          : `Imóvel: não identificado ainda`,
-        resumo ? `Contexto: ${resumo}` : "",
-        ``,
-        `Assuma pelo painel.`,
+        contact?.phone ? `*Conversar:*\nhttps://wa.me/${contact.phone.replace(/\D/g, "")}` : "",
+        property ? `*Imóvel:* ${property.title}${endereco ? `\n${endereco}` : ""}` : `*Imóvel:* não identificado ainda`,
+        resumo ? `*Contexto:* ${resumo}` : "",
+        `_Assuma pelo painel._`,
       ].filter(Boolean);
 
-      await sendText(groupId, linhas.join("\n")).catch((err) =>
+      await sendText(groupId, blocos.join("\n\n")).catch((err) =>
         logEvent("error", "handoff", "falha ao notificar grupo", { error: err instanceof Error ? err.message : String(err) })
       );
     } else {
