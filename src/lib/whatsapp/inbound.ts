@@ -9,7 +9,16 @@ import { pararCadencia } from "@/lib/followup/engine";
 
 const STALE_MS = Number(process.env.BOT_STALE_MS ?? 5 * 60 * 1000);
 
-const AUDIO_MESSAGE_TYPES = new Set(["audiomessage", "ptt", "audio"]);
+/** Formatos que só contas empresariais automatizadas enviam (visto na Claro, 29/09/26). */
+const TIPOS_DE_ROBO = new Set([
+  "buttonsmessage",
+  "listmessage",
+  "templatemessage",
+  "nativeflowmessage",
+  "interactivemessage",
+]);
+
+const AUDIO_MESSAGE_TYPES =new Set(["audiomessage", "ptt", "audio"]);
 
 function isAudioMessage(parsed: ParsedInboundMessage): boolean {
   if (AUDIO_MESSAGE_TYPES.has(parsed.messageType.toLowerCase())) return true;
@@ -211,6 +220,20 @@ export async function handleInboundMessage(rawMessage: Record<string, unknown>) 
   if (isStale) return;
   // humano assumiu (fila/aberta) ou atendimento encerrado — bot fica quieto
   if (conversation.status !== "bot" || !conversation.ai_enabled) return;
+
+  // botão/lista/menu só sai de conta empresarial automatizada (operadora, banco...), nunca
+  // de uma pessoa. Responder vira dois robôs conversando sem fim — encerra e não responde.
+  if (TIPOS_DE_ROBO.has(parsed.messageType.toLowerCase())) {
+    await db
+      .from("conversations")
+      .update({ ai_enabled: false, status: "closed", next_followup_at: null })
+      .eq("id", conversation.id);
+    await logEvent("warn", "inbound", "mensagem automática de empresa (botão/lista) — IA desligada nesta conversa", {
+      conversationId: conversation.id,
+      tipo: parsed.messageType,
+    });
+    return;
+  }
 
   scheduleDebounced(conversation.id, () => runAgentTurn(conversation.id));
 }

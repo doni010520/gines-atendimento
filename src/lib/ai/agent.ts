@@ -13,6 +13,10 @@ import { iniciarCadencia } from "@/lib/followup/engine";
 const MAX_ITERATIONS = 6;
 const LOCK_MS = 2 * 60 * 1000;
 const HISTORY_LIMIT = 30;
+/** Trava de loop: mais que isso de mensagens da IA em 10 min só acontece com robô do outro lado.
+ *  O envio do material (texto + vídeo + PDF) já conta 3, então a folga é generosa. */
+const LOOP_JANELA_MS = 10 * 60 * 1000;
+const LOOP_MAX_RESPOSTAS = 10;
 
 // bot diz que vai fazer algo sem ter chamado a tool correspondente nesse turno.
 // Achado em teste real (13/08/26): "já vou registrar" (nome) não era coberto — o modelo
@@ -83,6 +87,27 @@ export async function runAgentTurn(conversationId: string) {
   // só o robô fala em conversa dele: transferida pra humano (queued), aberta ou fechada,
   // o bot fica quieto mesmo que ai_enabled tenha ficado ligado
   if (conversation.status !== "bot" || !conversation.ai_enabled) return;
+
+  // trava contra loop: nenhuma pessoa real leva a IA a mandar tantas mensagens em 10 min.
+  // Se acontecer, é outro robô do outro lado — desliga a IA e deixa pro humano ver.
+  const { count: recentes } = await db
+    .from("messages")
+    .select("id", { count: "exact", head: true })
+    .eq("conversation_id", conversationId)
+    .eq("direction", "out")
+    .eq("is_internal", false)
+    .gte("created_at", new Date(Date.now() - LOOP_JANELA_MS).toISOString());
+  if ((recentes ?? 0) >= LOOP_MAX_RESPOSTAS) {
+    await db
+      .from("conversations")
+      .update({ ai_enabled: false, status: "open", next_followup_at: null })
+      .eq("id", conversationId);
+    await logEvent("warn", "agent", "possível loop com outro robô — IA desligada nesta conversa", {
+      conversationId,
+      respostasEm10min: recentes,
+    });
+    return;
+  }
 
   const locked = await acquireLock(db, conversationId);
   if (!locked) return; // já tem um turno rodando pra essa conversa
