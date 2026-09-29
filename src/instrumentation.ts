@@ -44,6 +44,8 @@ export async function register() {
   };
 
   setInterval(tick, INTERVALO_MS);
+  // lido por /api/health pra confirmar que o agendador subiu junto com o processo
+  (globalThis as { __ginesScheduler?: string }).__ginesScheduler = new Date().toISOString();
 
   await logEvent("info", "scheduler", "agendador da régua iniciado", {
     intervaloMin: INTERVALO_MS / 60_000,
