@@ -24,6 +24,7 @@ export async function register() {
 
   const { runFollowupEngine } = await import("@/lib/followup/engine");
   const { logEvent } = await import("@/lib/log");
+  const { checkSupabaseHealth } = await import("@/lib/monitor/health-check");
 
   let rodando = false;
 
@@ -41,6 +42,9 @@ export async function register() {
     } finally {
       rodando = false;
     }
+    // roda fora do try/finally da régua: mesmo que o Supabase esteja tão fora que
+    // logEvent acima também tenha falhado, a checagem de saúde tem que rodar do mesmo jeito
+    await checkSupabaseHealth().catch(() => {});
   };
 
   setInterval(tick, INTERVALO_MS);
