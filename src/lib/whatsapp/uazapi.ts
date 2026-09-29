@@ -49,7 +49,23 @@ export async function sendText(number: string, text: string) {
   return uazRequest("/send/text", { number: normalizePhone(number), text });
 }
 
-export type MediaType = "image" | "video" | "document" | "audio" | "ptt";
+/**
+ * O dono do número já conversou com essa pessoa digitando no aparelho (não pela API)
+ * nos últimos `dias`? Lê o histórico do chat na uazapi: mensagem nossa sem `wasSentByApi`
+ * foi escrita à mão no celular/WhatsApp Web.
+ */
+export async function atendidoManualmenteRecente(phone: string, dias = 30): Promise<boolean> {
+  const result = (await uazRequest("/message/find", {
+    chatid: `${normalizePhone(phone)}@s.whatsapp.net`,
+    limit: 50,
+  })) as { messages?: { fromMe?: boolean; wasSentByApi?: boolean; messageTimestamp?: number }[] };
+  const desde = Date.now() - dias * 24 * 60 * 60 * 1000;
+  return (result.messages ?? []).some(
+    (m) => m.fromMe === true && !m.wasSentByApi && Number(m.messageTimestamp ?? 0) >= desde
+  );
+}
+
+export type MediaType ="image" | "video" | "document" | "audio" | "ptt";
 
 export async function sendMedia(params: {
   number: string;

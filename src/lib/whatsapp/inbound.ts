@@ -4,7 +4,7 @@ import { scheduleDebounced } from "./debounce";
 import { runAgentTurn } from "@/lib/ai/agent";
 import { casarImovelPorAnuncio } from "./match-property";
 import { logEvent } from "@/lib/log";
-import { sendText, downloadAndTranscribeAudio } from "./uazapi";
+import { sendText, downloadAndTranscribeAudio, atendidoManualmenteRecente } from "./uazapi";
 import { pararCadencia } from "@/lib/followup/engine";
 
 const STALE_MS = Number(process.env.BOT_STALE_MS ?? 5 * 60 * 1000);
@@ -69,7 +69,30 @@ async function getOrCreateContact(db: ReturnType<typeof createServiceClient>, ph
   return created;
 }
 
-async function getOrCreateConversation(db: ReturnType<typeof createServiceClient>, contactId: string) {
+/**
+ * Conversa nova, mas o Gines já vinha falando com a pessoa direto pelo celular (ex.: números
+ * que estavam fora do filtro antigo)? Então ela entra já com humano, sem a IA se apresentar
+ * como se fosse lead novo. Falha na consulta = segue o fluxo normal com a IA.
+ */
+async function comecaComHumano(phone: string, contactId: string): Promise<boolean> {
+  try {
+    const manual = await atendidoManualmenteRecente(phone);
+    if (manual) {
+      await logEvent("info", "handoff", "conversa nova já atendida à mão no celular — IA começa desligada", {
+        contactId,
+      });
+    }
+    return manual;
+  } catch (err) {
+    await logEvent("warn", "inbound", "não consegui ler o histórico do chat na uazapi", {
+      contactId,
+      error: err instanceof Error ? err.message : String(err),
+    });
+    return false;
+  }
+}
+
+async function getOrCreateConversation(db: ReturnType<typeof createServiceClient>, contactId: string, phone: string) {
   const { data: existing } = await db
     .from("conversations")
     .select("*")
@@ -77,9 +100,10 @@ async function getOrCreateConversation(db: ReturnType<typeof createServiceClient
     .maybeSingle();
   if (existing) return existing;
 
+  const humano = await comecaComHumano(phone, contactId);
   const { data: created, error } = await db
     .from("conversations")
-    .insert({ contact_id: contactId })
+    .insert(humano ? { contact_id: contactId, ai_enabled: false, status: "open" } : { contact_id: contactId })
     .select()
     .single();
   if (error) {
@@ -117,7 +141,7 @@ export async function handleInboundMessage(rawMessage: Record<string, unknown>) 
   const isStale = messageTimestamp > 0 && Date.now() - messageTimestamp > STALE_MS;
 
   const contact = await getOrCreateContact(db, parsed.phone, parsed.senderName);
-  const conversation = await getOrCreateConversation(db, contact.id);
+  const conversation = await getOrCreateConversation(db, contact.id, parsed.phone);
 
   if (parsed.fromMe) {
     await handleFromMe(db, conversation.id, parsed, rawMessage);
