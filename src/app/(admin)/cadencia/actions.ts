@@ -166,6 +166,32 @@ export async function removeTouchMedia(id: string) {
   revalidatePath("/cadencia");
 }
 
+function lerHorario(formData: FormData, campo: string): number {
+  const m = /^(\d{1,2}):(\d{2})$/.exec(lerTexto(formData, campo));
+  if (!m || Number(m[1]) > 24 || Number(m[2]) > 59) throw new Error("Horário inválido (use HH:MM)");
+  return Math.min(24 * 60, Number(m[1]) * 60 + Number(m[2]));
+}
+
+/** Horário e dias em que o follow-up pode sair. Reagenda quem está no meio da cadência. */
+export async function saveJanela(formData: FormData) {
+  const supabase = await autenticado();
+  const inicio = lerHorario(formData, "window_start");
+  const fim = lerHorario(formData, "window_end");
+  const dias = formData.getAll("window_days").map(Number).filter((d) => Number.isInteger(d) && d >= 0 && d <= 6);
+  if (inicio >= fim) throw new Error("O horário de início precisa ser antes do fim");
+  if (dias.length === 0) throw new Error("Marque pelo menos um dia");
+
+  const { error } = await supabase.from("followup_settings").upsert({
+    id: true,
+    window_start_min: inicio,
+    window_end_min: fim,
+    window_days: [...new Set(dias)].sort((a, b) => a - b),
+    updated_at: new Date().toISOString(),
+  });
+  if (error) throw new Error(error.message);
+  await aplicarNasConversas();
+}
+
 /** Etiqueta que a conversa recebe quando o último toque sai sem retorno. */
 export async function saveFinalTag(formData: FormData) {
   const supabase = await autenticado();

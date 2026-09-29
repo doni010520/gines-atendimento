@@ -6,13 +6,20 @@ import { rotuloDias, TAG_PADRAO, type Toque } from "@/lib/followup/touches";
 import { dataHora } from "@/lib/ui/format";
 import { FilePicker } from "./FilePicker";
 import { DeleteTouchButton } from "./DeleteTouchButton";
-import { addTouch, removeTouchMedia, saveFinalTag, saveTouchMedia, updateTouch } from "./actions";
+import { normalizarJanela } from "@/lib/followup/business-hours";
+import { addTouch, removeTouchMedia, saveFinalTag, saveJanela, saveTouchMedia, updateTouch } from "./actions";
 
 const CONTROL =
   "w-full rounded-lg border border-border bg-surface-muted px-3 text-sm text-ink transition-colors " +
   "placeholder:text-ink-subtle hover:border-border-strong focus:bg-surface focus:border-primary";
 const LABEL = "block text-xs font-semibold text-ink-muted";
 const SECAO = "px-1 text-[10px] font-extrabold tracking-[0.09em] text-primary uppercase";
+
+const DIAS = ["Dom", "Seg", "Ter", "Qua", "Qui", "Sex", "Sáb"];
+
+function hhmm(min: number) {
+  return `${String(Math.floor(min / 60)).padStart(2, "0")}:${String(min % 60).padStart(2, "0")}`;
+}
 
 function horasFmt(h: number) {
   return `${String(Number(h)).replace(".", ",")}h`;
@@ -119,6 +126,8 @@ export default async function CadenciaPage() {
   const ativos = toques.filter((t) => t.active);
   const etiqueta = config?.final_tag ?? TAG_PADRAO;
   const aplicaEtiqueta = config?.apply_final_tag ?? true;
+  const janela = normalizarJanela({ inicio: config?.window_start_min, fim: config?.window_end_min, dias: config?.window_days });
+  const resumoJanela = `${hhmm(janela.inicio)}–${hhmm(janela.fim)}, ${janela.dias.map((d) => DIAS[d]).join(", ")}`;
 
   return (
     <div className="space-y-5">
@@ -174,6 +183,71 @@ export default async function CadenciaPage() {
         </div>
       </section>
 
+      <section className="space-y-2">
+        <h2 className={SECAO}>Horário de envio</h2>
+        <Card className="p-4">
+          <form action={saveJanela} className="flex flex-col gap-4">
+            <div className="flex flex-wrap items-end gap-3">
+              <div className="space-y-1.5">
+                <label htmlFor="window_start" className={LABEL}>
+                  Das
+                </label>
+                <input
+                  id="window_start"
+                  name="window_start"
+                  type="time"
+                  required
+                  defaultValue={hhmm(janela.inicio)}
+                  className={`tabular min-h-11 w-32 ${CONTROL}`}
+                />
+              </div>
+              <div className="space-y-1.5">
+                <label htmlFor="window_end" className={LABEL}>
+                  Até
+                </label>
+                <input
+                  id="window_end"
+                  name="window_end"
+                  type="time"
+                  required
+                  defaultValue={hhmm(janela.fim)}
+                  className={`tabular min-h-11 w-32 ${CONTROL}`}
+                />
+              </div>
+            </div>
+            <fieldset className="space-y-1.5">
+              <legend className={LABEL}>Dias em que o follow-up pode sair</legend>
+              <div className="flex flex-wrap gap-2 pt-1">
+                {DIAS.map((rotulo, d) => (
+                  <label
+                    key={d}
+                    className="inline-flex min-h-11 cursor-pointer items-center gap-2 rounded-lg border border-border bg-surface-muted px-3 text-sm text-ink has-[:checked]:border-primary"
+                  >
+                    <input
+                      type="checkbox"
+                      name="window_days"
+                      value={d}
+                      defaultChecked={janela.dias.includes(d)}
+                      className="h-4 w-4 accent-[var(--color-primary)]"
+                    />
+                    {rotulo}
+                  </label>
+                ))}
+              </div>
+            </fieldset>
+            <p className="text-xs text-ink-subtle">
+              Horário de São Paulo. Toque que vence fora da janela não é perdido: espera a próxima abertura. Ao salvar,
+              quem está no meio da cadência é reagendado.
+            </p>
+            <div>
+              <FormSubmitButton pendingLabel="Salvando..." size="sm">
+                Salvar horário
+              </FormSubmitButton>
+            </div>
+          </form>
+        </Card>
+      </section>
+
       <div className="grid grid-cols-1 items-stretch gap-3 md:grid-cols-2">
         <section className="flex flex-col gap-2">
           <h2 className={SECAO}>Novo toque</h2>
@@ -216,7 +290,7 @@ export default async function CadenciaPage() {
               </label>
               <p className="text-xs text-ink-subtle">
                 Os textos são escritos pela IA a partir da conversa, seguindo o objetivo de cada toque. Qualquer resposta
-                do lead pausa a cadência; fora do horário (09h30–19h30, sem domingo) o toque espera a próxima abertura.
+                do lead pausa a cadência; fora do horário de envio ({resumoJanela}) o toque espera a próxima abertura.
                 Entre dois toques há sempre pelo menos 1h. No texto de reserva, <code>{"{nome}"}</code> vira o primeiro
                 nome do lead. Áudio chega no WhatsApp como mensagem de voz.
               </p>

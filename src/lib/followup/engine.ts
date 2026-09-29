@@ -2,7 +2,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "@/lib/supabase/database.types";
 import { createServiceClient } from "@/lib/supabase/service";
 import { sendMedia, sendText } from "@/lib/whatsapp/uazapi";
-import { isWithinWindow, modoTesteGapMs, nextAllowedTime } from "./business-hours";
+import { isWithinWindow, JANELA_PADRAO, modoTesteGapMs, nextAllowedTime, type Janela } from "./business-hours";
 import { gerarTextoToque } from "./ai-copy";
 import {
   carregarConfig,
@@ -60,7 +60,13 @@ function gapMinimoMs() {
  * pra próxima abertura) e o piso `notBefore`. No modo de teste, o toque de posição k sai
  * k×gap depois da âncora e a janela é ignorada.
  */
-export function scheduleTouch(toque: Pick<Toque, "delay_hours">, indice: number, anchor: Date, notBefore?: Date | null): Date {
+export function scheduleTouch(
+  toque: Pick<Toque, "delay_hours">,
+  indice: number,
+  anchor: Date,
+  notBefore?: Date | null,
+  janela: Janela = JANELA_PADRAO
+): Date {
   const gapTeste = modoTesteGapMs();
   if (gapTeste !== null) {
     const at = new Date(anchor.getTime() + Math.max(1, indice) * gapTeste);
@@ -69,7 +75,7 @@ export function scheduleTouch(toque: Pick<Toque, "delay_hours">, indice: number,
 
   let at = new Date(anchor.getTime() + Number(toque.delay_hours) * 60 * 60 * 1000);
   if (notBefore && at < notBefore) at = notBefore;
-  return nextAllowedTime(at);
+  return nextAllowedTime(at, janela);
 }
 
 /** Piso do próximo toque: 1h (ou o gap do modo teste) depois do último enviado. */
@@ -83,8 +89,11 @@ function pisoDepoisDe(ultimoEnvio: string | null): Date | null {
  */
 export async function iniciarCadencia(db: Db, conversationId: string, anchor: Date) {
   let primeiro: Toque | null = null;
+  let janela = JANELA_PADRAO;
   try {
-    primeiro = (await carregarToquesAtivos(db))[0] ?? null;
+    const [toques, config] = await Promise.all([carregarToquesAtivos(db), carregarConfig(db)]);
+    primeiro = toques[0] ?? null;
+    janela = config.janela;
   } catch (err) {
     await logEvent("error", "followup", "falha ao iniciar cadência", {
       conversationId,
@@ -102,7 +111,7 @@ export async function iniciarCadencia(db: Db, conversationId: string, anchor: Da
       followup_last_touch_hours: 0,
       followup_last_touch_at: null,
       followup_next_touch_id: primeiro?.id ?? null,
-      next_followup_at: primeiro ? scheduleTouch(primeiro, 1, anchor).toISOString() : null,
+      next_followup_at: primeiro ? scheduleTouch(primeiro, 1, anchor, null, janela).toISOString() : null,
     })
     .eq("id", conversationId)
     .eq("status", "bot")
@@ -211,10 +220,10 @@ async function processOne(db: Db, conv: DueConversation, toques: Toque[], config
 
   // fora da janela: só adia, nunca pula toque nem manda fora de hora
   // (no modo de teste a janela é ignorada de propósito — é o ponto do modo)
-  if (modoTesteGapMs() === null && !isWithinWindow(now)) {
+  if (modoTesteGapMs() === null && !isWithinWindow(now, config.janela)) {
     await db
       .from("conversations")
-      .update({ next_followup_at: nextAllowedTime(now).toISOString() })
+      .update({ next_followup_at: nextAllowedTime(now, config.janela).toISOString() })
       .eq("id", conv.id);
     return false;
   }
@@ -281,7 +290,7 @@ async function enviarToque(
 
   // a lista pode ter mudado desde o agendamento (horas aumentadas, toque trocado): recalcula
   // a partir da âncora e, se ainda não venceu, só reagenda
-  const devido = scheduleTouch(toque, indice, anchor, pisoDepoisDe(conv.followup_last_touch_at));
+  const devido = scheduleTouch(toque, indice, anchor, pisoDepoisDe(conv.followup_last_touch_at), config.janela);
   if (!forcar && devido.getTime() > now.getTime() + FOLGA_MS) {
     await db
       .from("conversations")
@@ -304,7 +313,7 @@ async function enviarToque(
     return { enviado: false, motivo: "lead respondeu depois da última mensagem do robô — cadência parada" };
   }
 
-  const { data: contact } = await db.from("contacts").select("phone,name").eq("id", conv.contact_id).single();
+  const { data: contact } = await db.from("contacts").select("phone,name,name_confirmed").eq("id", conv.contact_id).single();
   if (!contact) return { enviado: false, motivo: "contato não encontrado" };
 
   const { texto, origem } = await gerarTextoToque({
@@ -313,7 +322,8 @@ async function enviarToque(
     toque,
     indice,
     total: toques.length,
-    nome: contact.name,
+    // nome de exibição do WhatsApp pode ser qualquer coisa ("®️©️"): só usa o que a pessoa confirmou
+    nome: contact.name_confirmed ? contact.name : null,
     propertyId: conv.property_id,
     now,
   });
@@ -355,7 +365,7 @@ async function enviarToque(
 
   let proximo: Date | null = null;
   if (seguinte) {
-    proximo = scheduleTouch(seguinte, indice + 1, anchor, new Date(now.getTime() + gapMinimoMs()));
+    proximo = scheduleTouch(seguinte, indice + 1, anchor, new Date(now.getTime() + gapMinimoMs()), config.janela);
     await db
       .from("conversations")
       .update({ ...estadoEnviado, followup_next_touch_id: seguinte.id, next_followup_at: proximo.toISOString() })
@@ -383,7 +393,7 @@ async function enviarToque(
  * próxima rodada do cron, respeitando o piso de 1h desde o último envio (sem rajada).
  */
 export async function reagendarCadencias(db: Db) {
-  const toques = await carregarToquesAtivos(db);
+  const [toques, config] = await Promise.all([carregarToquesAtivos(db), carregarConfig(db)]);
   const { data: rodando, error } = await db
     .from("conversations")
     .select("id,followup_anchor_at,followup_last_touch_hours,followup_last_touch_at")
@@ -395,7 +405,13 @@ export async function reagendarCadencias(db: Db) {
     const toque = proximoToque(toques, conv.followup_last_touch_hours);
     // sem próximo: deixa vencer agora, o cron encerra e põe a etiqueta pelo caminho normal
     const quando = toque
-      ? scheduleTouch(toque, indiceDoToque(toques, toque.id), new Date(conv.followup_anchor_at), pisoDepoisDe(conv.followup_last_touch_at))
+      ? scheduleTouch(
+          toque,
+          indiceDoToque(toques, toque.id),
+          new Date(conv.followup_anchor_at),
+          pisoDepoisDe(conv.followup_last_touch_at),
+          config.janela
+        )
       : new Date();
     await db
       .from("conversations")

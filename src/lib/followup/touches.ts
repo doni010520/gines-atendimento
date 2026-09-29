@@ -1,5 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "@/lib/supabase/database.types";
+import { normalizarJanela, type Janela } from "./business-hours";
 
 /**
  * Toques da cadência, editáveis em /cadencia (tabela followup_touches).
@@ -13,7 +14,7 @@ import type { Database } from "@/lib/supabase/database.types";
 type Db = SupabaseClient<Database>;
 
 export type Toque = Database["public"]["Tables"]["followup_touches"]["Row"];
-export type ConfigCadencia = { finalTag: string; applyFinalTag: boolean };
+export type ConfigCadencia = { finalTag: string; applyFinalTag: boolean; janela: Janela };
 
 export const TAG_PADRAO = "Perdido por Falta de Retorno";
 
@@ -30,10 +31,11 @@ export async function carregarToquesAtivos(db: Db): Promise<Toque[]> {
 }
 
 export async function carregarConfig(db: Db): Promise<ConfigCadencia> {
-  const { data } = await db.from("followup_settings").select("final_tag,apply_final_tag").eq("id", true).maybeSingle();
+  const { data } = await db.from("followup_settings").select("*").eq("id", true).maybeSingle();
   return {
     finalTag: data?.final_tag?.trim() || TAG_PADRAO,
     applyFinalTag: data?.apply_final_tag ?? true,
+    janela: normalizarJanela({ inicio: data?.window_start_min, fim: data?.window_end_min, dias: data?.window_days }),
   };
 }
 

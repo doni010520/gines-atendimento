@@ -303,18 +303,27 @@ export type Database = {
           id: boolean
           final_tag: string
           apply_final_tag: boolean
+          window_start_min: number
+          window_end_min: number
+          window_days: number[]
           updated_at: string
         }
         Insert: {
           id?: boolean
           final_tag?: string
           apply_final_tag?: boolean
+          window_start_min?: number
+          window_end_min?: number
+          window_days?: number[]
           updated_at?: string
         }
         Update: {
           id?: boolean
           final_tag?: string
           apply_final_tag?: boolean
+          window_start_min?: number
+          window_end_min?: number
+          window_days?: number[]
           updated_at?: string
         }
         Relationships: []
