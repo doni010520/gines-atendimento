@@ -79,7 +79,11 @@ function splitForWhatsapp(text: string): string[] {
     .slice(0, 4);
 }
 
-export async function runAgentTurn(conversationId: string) {
+/**
+ * @param opts.instrucaoExtra orientação só deste turno (ex.: primeira abordagem de um lead que
+ *   veio da planilha e ainda não mandou mensagem) — entra como mensagem de sistema no fim.
+ */
+export async function runAgentTurn(conversationId: string, opts: { instrucaoExtra?: string } = {}) {
   const db = createServiceClient();
 
   const { data: conversation } = await db.from("conversations").select("*").eq("id", conversationId).single();
@@ -152,6 +156,7 @@ export async function runAgentTurn(conversationId: string) {
           role: m.direction === "in" ? "user" : "assistant",
           content: m.body ?? "",
         }))),
+      ...(opts.instrucaoExtra ? [{ role: "system" as const, content: opts.instrucaoExtra }] : []),
     ];
 
     const client = openaiClient();
