@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { StatusSelect } from "./StatusSelect";
+import { DeletePropertyButton } from "./DeletePropertyButton";
 import { PageHeader } from "@/components/ui/card";
 import { buttonClass } from "@/components/ui/button";
 import { IconPlus } from "@/components/icons";
@@ -101,6 +102,9 @@ export default async function ImoveisPage() {
             >
               Editar
             </Link>
+            <div className="mt-2">
+              <DeletePropertyButton id={p.id} titulo={p.title} block />
+            </div>
           </div>
         ))}
         {list.length === 0 && vazio}
@@ -135,12 +139,15 @@ export default async function ImoveisPage() {
                   <StatusSelect id={p.id} status={p.status} />
                 </td>
                 <td className="px-4 py-3 text-right">
-                  <Link
-                    href={`/imoveis/${p.id}/editar`}
-                    className="text-sm text-primary underline-offset-4 transition-colors hover:underline"
-                  >
-                    editar
-                  </Link>
+                  <div className="flex items-center justify-end gap-3">
+                    <Link
+                      href={`/imoveis/${p.id}/editar`}
+                      className="text-sm text-primary underline-offset-4 transition-colors hover:underline"
+                    >
+                      editar
+                    </Link>
+                    <DeletePropertyButton id={p.id} titulo={p.title} />
+                  </div>
                 </td>
               </tr>
             ))}

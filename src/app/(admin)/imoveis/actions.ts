@@ -3,6 +3,7 @@
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
+import { createServiceClient } from "@/lib/supabase/service";
 import { logEvent } from "@/lib/log";
 import type { Database } from "@/lib/supabase/database.types";
 
@@ -155,5 +156,39 @@ export async function setPropertyStatus(id: string, status: string) {
   const supabase = await createSupabaseServerClient();
   const { error } = await supabase.from("properties").update({ status: status as PropertyStatus }).eq("id", id);
   if (error) throw new Error(error.message);
+  revalidatePath("/imoveis");
+}
+
+/**
+ * Exclui o imóvel de vez: solta as conversas e anúncios que apontavam pra ele (a IA volta a
+ * perguntar qual imóvel), apaga do banco e remove os arquivos do Storage.
+ */
+export async function deleteProperty(id: string) {
+  const supabase = await createSupabaseServerClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) redirect("/login");
+
+  // conversas/anúncios de outros usuários também: precisa do service client (já autenticado acima)
+  const db = createServiceClient();
+  const soltar = await Promise.all([
+    db.from("conversations").update({ property_id: null }).eq("property_id", id),
+    db.from("ad_referrals").update({ matched_property_id: null }).eq("matched_property_id", id),
+  ]);
+  const falhaSoltar = soltar.find((r) => r.error)?.error;
+  if (falhaSoltar) throw new Error(`Não consegui excluir: ${falhaSoltar.message}`);
+
+  const { error } = await db.from("properties").delete().eq("id", id);
+  if (error) throw new Error(`Não consegui excluir: ${error.message}`);
+
+  // arquivos ficam em <id>/...; falha aqui não desfaz a exclusão, só deixa lixo no Storage
+  const { data: arquivos } = await db.storage.from(BUCKET).list(id, { limit: 1000 });
+  if (arquivos?.length) {
+    const { error: stErr } = await db.storage.from(BUCKET).remove(arquivos.map((a) => `${id}/${a.name}`));
+    if (stErr) await logEvent("warn", "imovel", "imóvel excluído, mas arquivos ficaram no Storage", { id, error: stErr.message });
+  }
+
+  await logEvent("info", "imovel", "imóvel excluído", { id, por: user.email });
   revalidatePath("/imoveis");
 }
