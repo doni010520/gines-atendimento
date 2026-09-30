@@ -8,6 +8,10 @@ const nextConfig: NextConfig = {
     serverActions: {
       bodySizeLimit: "50mb",
     },
+    // o proxy (checagem de login) bufferiza o corpo com teto próprio de 10MB — acima disso
+    // a Server Action recebe o upload cortado e a página cai em "server error". Tem que
+    // acompanhar o bodySizeLimit de cima.
+    proxyClientMaxBodySize: "60mb",
   },
 };
 
