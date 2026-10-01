@@ -86,6 +86,7 @@ export async function POST(req: NextRequest) {
       "PRIMEIRA ABORDAGEM: esta pessoa preencheu o formulário de um anúncio e ainda NÃO mandou mensagem no WhatsApp — é você quem inicia a conversa agora.",
       nome ? `O nome dela (do formulário) é ${nome}: não pergunte o nome.` : "",
       "Cumprimente, diga que está entrando em contato porque ela demonstrou interesse pelo anúncio e siga o FLUXO a partir do passo do imóvel.",
+      "Nesta primeira mensagem NÃO chame transferir_para_humano: a pessoa ainda não pediu nada. Se algo falhar, só pergunte em qual imóvel ela tem interesse.",
     ]
       .filter(Boolean)
       .join(" "),

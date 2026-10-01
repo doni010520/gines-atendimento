@@ -68,10 +68,19 @@ async function toolFocarImovel(ctx: ToolContext, args: Record<string, unknown>) 
   const propertyId = typeof args.property_id === "string" ? args.property_id : null;
   if (!propertyId) return { ok: false, error: "property_id ausente" };
 
-  const { data: property } = await ctx.db.from("properties").select("id").eq("id", propertyId).maybeSingle();
-  if (!property) return { ok: false, error: "imóvel não encontrado" };
+  // o modelo às vezes manda o título no lugar do id: aceita os dois, e "re-focar" o imóvel
+  // que já está em foco não é erro (antes isso virava transbordo pro Gines sem motivo)
+  const ehUuid = /^[0-9a-f-]{36}$/i.test(propertyId);
+  const { data: property } = ehUuid
+    ? await ctx.db.from("properties").select("id").eq("id", propertyId).maybeSingle()
+    : await ctx.db.from("properties").select("id").ilike("title", propertyId.trim()).limit(1).maybeSingle();
+  if (!property) {
+    if (ctx.propertyId) return { ok: true, aviso: "id não reconhecido, mas já existe imóvel em foco — siga com ele" };
+    return { ok: false, error: "imóvel não encontrado — use o id retornado por buscar_imovel" };
+  }
+  ctx.propertyId = property.id;
 
-  await ctx.db.from("conversations").update({ property_id: propertyId }).eq("id", ctx.conversationId);
+  await ctx.db.from("conversations").update({ property_id: property.id }).eq("id", ctx.conversationId);
   return { ok: true };
 }
 

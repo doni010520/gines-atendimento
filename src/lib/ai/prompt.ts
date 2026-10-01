@@ -113,6 +113,7 @@ function formatMoney(v: number | null) {
 
 function formatProperty(p: PropertyRow): string {
   return [
+    `ID (use em focar_imovel): ${p.id}`,
     `Título: ${p.title}`,
     `Tipo de imóvel: ${p.kind ?? "não informado"} | Modalidade: ${p.type} | Status: ${p.status}`,
     `Preço: ${formatMoney(p.price)}${p.condo_fee ? ` | Condomínio: ${formatMoney(p.condo_fee)}` : ""}${p.iptu ? ` | IPTU: ${formatMoney(p.iptu)}` : ""}`,
