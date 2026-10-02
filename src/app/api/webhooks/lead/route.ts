@@ -3,6 +3,8 @@ import { createServiceClient } from "@/lib/supabase/service";
 import { runAgentTurn } from "@/lib/ai/agent";
 import { casarImovelPorAnuncio } from "@/lib/whatsapp/match-property";
 import { logEvent } from "@/lib/log";
+import { sendText } from "@/lib/whatsapp/uazapi";
+import { greetingFor } from "@/lib/followup/business-hours";
 
 export const dynamic = "force-dynamic";
 
@@ -80,22 +82,63 @@ export async function POST(req: NextRequest) {
     imovelIdentificado: Boolean(propertyId),
   });
 
-  // responde já pra planilha não esperar a IA; o turno roda em seguida no servidor
-  void runAgentTurn(conversa.id, {
-    instrucaoExtra: [
-      "PRIMEIRA ABORDAGEM: esta pessoa preencheu o formulário de um anúncio e ainda NÃO mandou mensagem no WhatsApp — é você quem inicia a conversa agora.",
-      nome ? `O nome dela (do formulário) é ${nome}: não pergunte o nome.` : "",
-      "Cumprimente, diga que está entrando em contato porque ela demonstrou interesse pelo anúncio e siga o FLUXO a partir do passo do imóvel.",
-      "Nesta primeira mensagem NÃO chame transferir_para_humano: a pessoa ainda não pediu nada. Se algo falhar, só pergunte em qual imóvel ela tem interesse.",
-    ]
-      .filter(Boolean)
-      .join(" "),
-  }).catch((err) =>
-    logEvent("error", "lead-planilha", "falha na primeira abordagem da IA", {
+  // responde já pra planilha não esperar; a abordagem roda em seguida no servidor
+  void primeiraAbordagem(db, conversa.id, telefone, nome, propertyId).catch((err) =>
+    logEvent("error", "lead-planilha", "falha na primeira abordagem", {
       conversationId: conversa.id,
       error: err instanceof Error ? err.message : String(err),
     })
   );
 
   return NextResponse.json({ ok: true, resultado: "chamado", imovelIdentificado: Boolean(propertyId) });
+}
+
+/**
+ * Ordem pedida pelo Gines (01/10): saudação → material → convite pra visita.
+ * A IA só manda texto no fim do turno (depois das tools), então com imóvel identificado a
+ * saudação sai daqui, fixa, ANTES; a IA fica só com material + convite.
+ */
+async function primeiraAbordagem(
+  db: ReturnType<typeof createServiceClient>,
+  conversationId: string,
+  telefone: string,
+  nome: string | null,
+  propertyId: string | null
+) {
+  const primeiroNome = nome?.trim().split(/\s+/)[0];
+  const regras =
+    "Nesta abordagem NÃO chame transferir_para_humano: a pessoa ainda não pediu nada. Se algo falhar, só pergunte em qual imóvel ela tem interesse.";
+
+  if (!propertyId) {
+    // sem imóvel não há material: a IA cumprimenta e pergunta qual imóvel, numa mensagem só
+    await runAgentTurn(conversationId, {
+      instrucaoExtra: [
+        "PRIMEIRA ABORDAGEM: esta pessoa preencheu o formulário de um anúncio e ainda NÃO mandou mensagem no WhatsApp — é você quem inicia a conversa agora.",
+        nome ? `O nome dela (do formulário) é ${nome}: não pergunte o nome.` : "",
+        "Cumprimente, diga que está entrando em contato porque ela demonstrou interesse pelo anúncio e pergunte em qual imóvel tem interesse.",
+        regras,
+      ]
+        .filter(Boolean)
+        .join(" "),
+    });
+    return;
+  }
+
+  const { data: imovel } = await db.from("properties").select("title").eq("id", propertyId).maybeSingle();
+  const saudacao =
+    `${greetingFor(new Date())}${primeiroNome ? `, ${primeiroNome}` : ""}! Aqui é a assistente virtual do Gines. ` +
+    `Vi que você se interessou pelo anúncio${imovel?.title ? ` da ${imovel.title}` : ""} e vou te enviar o material completo.`;
+  await sendText(telefone, saudacao);
+  await db.from("messages").insert({ conversation_id: conversationId, direction: "out", body: saudacao, is_internal: false });
+
+  await runAgentTurn(conversationId, {
+    instrucaoExtra: [
+      "PRIMEIRA ABORDAGEM: você JÁ cumprimentou a pessoa na mensagem anterior — não cumprimente nem se apresente de novo.",
+      nome ? `O nome dela é ${nome}: não pergunte o nome.` : "",
+      "Agora chame enviar_material e, depois, termine com UMA mensagem curta convidando para conhecer o imóvel (chame oferecer_visita).",
+      regras,
+    ]
+      .filter(Boolean)
+      .join(" "),
+  });
 }
