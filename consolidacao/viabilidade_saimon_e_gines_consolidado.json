@@ -7,51 +7,12 @@
   "impostoPct": 4,
   "exportadoEm": "2026-10-06T12:00:00.000Z",
   "resumo": {
-    "total": 5,
+    "total": 6,
     "aprovados": 1,
-    "alertas": 4,
+    "alertas": 5,
     "reprovados": 0
   },
   "produtos": [
-    {
-      "termo": "disco de arado",
-      "fornecedor": "THOR",
-      "tipo": "ORGÂNICO",
-      "status": "⚠️",
-      "custo": 19,
-      "comissaoPct": 14,
-      "pvRanqueamento": 55,
-      "pvMenor": 56,
-      "pvMaior": 88,
-      "freteRanqueamento": 7,
-      "freteMenor": 7,
-      "freteMaior": 7,
-      "avaliacao": 4.8,
-      "visitas": 757,
-      "vendasDia": 0.8,
-      "margemRanqueamentoPct": 34.7273,
-      "margemMenorPct": 35.5714,
-      "margemMaiorPct": 52.4545,
-      "lucroRanqueamento": 19.1,
-      "lucroMenor": 19.92,
-      "lucroMaior": 46.16,
-      "links": [
-        {
-          "url": "https://www.mercadolivre.com.br/disco-tacho-de-arado-porcoes-em-geral-promocao-grande/p/MLB2091650497#polycard_client=search-desktop&be_origin=backend&overlay_label=not_apply&search_layout=grid&position=8&type=product&tracking_id=51f6a3f6-2236-4fbf-b266-f8761ca421ff&wid=MLB6907592690&sid=searchhttps://www.mercadolivre.com.br/disco-tacho-de-arado-porcoes-em-geral-promocao-grande/p/MLB2091650497#polycard_client=search-desktop&be_origin=backend&overlay_label=not_apply&search_layout=grid&position=8&type=product&tracking_id=51f6a3f6-2236-4fbf-b266-f8761ca421ff&wid=MLB6907592690&sid=search",
-          "validacao": "NOK"
-        },
-        {
-          "url": "https://www.mercadolivre.com.br/chapa-grill-disco-30cm-alcas-antiaderente-fogao-bifeteria/up/MLBU4333942052?pdp_filters=shipping%3Afulfillment#polycard_client=search-desktop&be_origin=backend&overlay_label=not_apply&search_layout=grid&position=43&type=product&tracking_id=c11b9a77-6c97-4cb4-9e90-a63f8784f98c&wid=MLB4897583839&sid=search",
-          "validacao": "OK"
-        },
-        {
-          "url": "https://www.mercadolivre.com.br/chapa-redonda-para-churrasco-e-fogao-com-alcas-preto/up/MLBU4320930687?pdp_filters=SHIPPING_ORIGIN%3A10215068#polycard_client=search-desktop&be_origin=backend&overlay_label=not_apply&search_layout=grid&position=12&type=product&tracking_id=4ddf8e26-25fd-48da-bd81-5ac74d746647&wid=MLB4901968771&sid=search",
-          "validacao": "OK"
-        }
-      ],
-      "variacaoOk": "",
-      "marcaOk": ""
-    },
     {
       "termo": "porta cartões",
       "fornecedor": "b-max",
@@ -202,6 +163,84 @@
         },
         {
           "url": "https://produto.mercadolivre.com.br/MLB-4635998418-jogo-americano-4-pecas-redondo-sousplat-supla-mesa-posta-_JM?searchVariation=199368785089#polycard_client=search-desktop&searchVariation=199368785089&be_origin=backend&overlay_label=not_apply&search_layout=grid&position=22&type=item&tracking_id=63f7b5bd-95d6-4313-a68b-c2a30fda1d38&sid=search",
+          "validacao": "OK"
+        }
+      ],
+      "variacaoOk": "",
+      "marcaOk": ""
+    },
+    {
+      "termo": "MAQUINA DONUT",
+      "fornecedor": "THOR",
+      "tipo": "ORGÂNICO",
+      "status": "⚠️",
+      "custo": 45,
+      "comissaoPct": 11,
+      "pvRanqueamento": 96.5,
+      "pvMenor": 96.79,
+      "pvMaior": 119.9,
+      "freteRanqueamento": 16.5,
+      "freteMenor": 16.5,
+      "freteMaior": 16.5,
+      "avaliacao": 4.7,
+      "visitas": 1174,
+      "vendasDia": 1.4,
+      "margemRanqueamentoPct": 21.2694,
+      "margemMenorPct": 21.4604,
+      "margemMaiorPct": 33.7073,
+      "lucroRanqueamento": 20.53,
+      "lucroMenor": 20.77,
+      "lucroMaior": 40.42,
+      "links": [
+        {
+          "url": "https://www.mercadolivre.com.br/maquina-mini-donuts-rosquinhas-biscoitos-sobremesa-caseiro/up/MLBU5036305225?pdp_filters=shipping%3Afulfillment#polycard_client=search-desktop&be_origin=backend&overlay_label=not_apply&search_layout=grid&position=1&type=product&tracking_id=9128a4f4-1e67-4bec-aab6-8f323b6560e3&wid=MLB7564978136&sid=search",
+          "validacao": "OK"
+        },
+        {
+          "url": "https://www.mercadolivre.com.br/maquina-mini-donuts-rosquinhas-biscoitos-duplo-aquecimento/up/MLBU3966058491?pdp_filters=shipping%3Afulfillment#polycard_client=search-desktop&be_origin=backend&overlay_label=not_apply&search_layout=grid&position=3&type=product&tracking_id=9128a4f4-1e67-4bec-aab6-8f323b6560e3&wid=MLB4684040653&sid=search",
+          "validacao": "OK"
+        },
+        {
+          "url": "https://www.mercadolivre.com.br/maquina-eletrica-donuts-6-cm-com-superficie-profissional/up/MLBU4291038699?pdp_filters=shipping%3Afulfillment#polycard_client=search-desktop&be_origin=backend&overlay_label=not_apply&search_layout=grid&position=4&type=product&tracking_id=9128a4f4-1e67-4bec-aab6-8f323b6560e3&wid=MLB4887625535&sid=search",
+          "validacao": "OK"
+        }
+      ],
+      "variacaoOk": "",
+      "marcaOk": ""
+    },
+    {
+      "termo": "carrinho feira 6 rodas",
+      "fornecedor": "B-max",
+      "tipo": "ORGÂNICO",
+      "status": "⚠️",
+      "custo": 45,
+      "comissaoPct": 10.5,
+      "pvRanqueamento": 99.5,
+      "pvMenor": 118.65,
+      "pvMaior": 183.92,
+      "freteRanqueamento": 15.75,
+      "freteMenor": 15.75,
+      "freteMaior": 15.75,
+      "avaliacao": 4.8,
+      "visitas": 160,
+      "vendasDia": 0.4,
+      "margemRanqueamentoPct": 24.4447,
+      "margemMenorPct": 34.299,
+      "margemMaiorPct": 52.4693,
+      "lucroRanqueamento": 24.32,
+      "lucroMenor": 40.7,
+      "lucroMaior": 96.5,
+      "links": [
+        {
+          "url": "https://www.mercadolivre.com.br/carrinho-de-feira-compras-com-6-rodas-dobravel-45-kg-luxo/up/MLBU4472061998#polycard_client=search-desktop&be_origin=backend&overlay_label=not_apply&search_layout=grid&position=26&type=product&tracking_id=dc9687e2-4559-4208-bf50-eb8752949bcc&wid=MLB4954165775&sid=search",
+          "validacao": "OK"
+        },
+        {
+          "url": "https://www.mercadolivre.com.br/carrinho-de-feira-compras-6-rodas-dobravel-sobe-escada-30-kg/up/MLBU3781740232#polycard_client=search-desktop&be_origin=backend&overlay_label=not_apply&search_layout=grid&position=37&type=product&tracking_id=1929c27a-b0a7-4a88-a731-0ed90e866f72&wid=MLB4463787413&sid=search",
+          "validacao": "OK"
+        },
+        {
+          "url": "https://www.mercadolivre.com.br/carrinho-de-feira-compras-mercado-dobravel-40-kg-sobe-escada/up/MLBU4157870795#polycard_client=search-desktop&be_origin=backend&overlay_label=not_apply&search_layout=grid&position=3&type=product&tracking_id=18ae0aec-3b0a-48a4-85fb-6c33cae24767&wid=MLB4819686603&sid=search",
           "validacao": "OK"
         }
       ],
