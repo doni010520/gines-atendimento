@@ -4,7 +4,7 @@ export const TOOLS = [
     function: {
       name: "buscar_imovel",
       description:
-        "Busca imóveis ativos por filtro estruturado. Use quando a pessoa não veio de um anúncio identificado ou quer ver outras opções. Preencha SÓ os campos que a pessoa realmente mencionou — não invente cidade/bairro/tipo que ela não disse. A busca de localização é APROXIMADA (tolera erro de grafia, e também olha endereço/descrição — então avenida próxima ou ponto de referência que a pessoa citar também pode bater). NUNCA invente resultado — sempre chame isso antes de listar imóveis que não estão no contexto já injetado. Se voltar vazio, pode tentar de novo com um termo mais genérico antes de dizer que não tem.",
+        "Busca imóveis ativos por filtro estruturado. Use quando a pessoa não veio de um anúncio identificado ou quer ver outras opções. Preencha SÓ os campos que a pessoa realmente mencionou — não invente cidade/bairro/tipo que ela não disse. A busca de localização é APROXIMADA (tolera erro de grafia, e também olha endereço/descrição — então avenida próxima ou ponto de referência que a pessoa citar também pode bater). NUNCA invente resultado — sempre chame isso antes de listar imóveis que não estão no contexto já injetado, e SEMPRE antes de dizer que um imóvel não existe ou não está disponível. Se voltar vazio, pode tentar de novo com um termo mais genérico antes de dizer que não tem.",
       parameters: {
         type: "object",
         properties: {
@@ -12,7 +12,7 @@ export const TOOLS = [
           bairro: {
             type: "string",
             description:
-              "Bairro, região, avenida próxima ou ponto de referência que a pessoa mencionou (ex: Vila Madalena, ou 'perto do Parque Villa Lobos') — NÃO coloque a cidade aqui. Pode escrever como a pessoa falou, não precisa ser a grafia exata.",
+              "Bairro, RUA/ENDEREÇO, região, avenida próxima ou ponto de referência que a pessoa mencionou (ex: Vila Madalena, 'Rua Professor Miguel Maurício da Rocha', 'perto do Parque Villa Lobos') — NÃO coloque a cidade aqui. Pode escrever como a pessoa falou, não precisa ser a grafia exata. Se a pessoa citar uma rua, busque pela rua.",
           },
           tipo_imovel: {
             type: "string",

@@ -176,46 +176,67 @@ export async function runAgentTurn(conversationId: string, opts: { instrucaoExtr
     let atendimentoFinalizado = false;
     let finalText = "";
 
-    for (let step = 0; step < MAX_ITERATIONS; step++) {
-      const completion = await callOpenAiWithRetry(client, messages);
-      const choice = completion.choices[0];
-      const msg = choice.message;
+    let buscouImovel = false;
+    // roda o modelo + ferramentas até ele produzir o texto final do turno
+    const executarAteTexto = async (): Promise<string> => {
+      for (let step = 0; step < MAX_ITERATIONS; step++) {
+        const completion = await callOpenAiWithRetry(client, messages);
+        const choice = completion.choices[0];
+        const msg = choice.message;
 
-      if (msg.tool_calls && msg.tool_calls.length > 0) {
-        toolWasCalled = true;
-        messages.push(msg);
-        for (const toolCall of msg.tool_calls) {
-          const result = await runTool(toolCall, toolCtx);
-          messages.push({
-            role: "tool",
-            tool_call_id: toolCall.id,
-            content: JSON.stringify(result),
-          });
-          if (toolCall.type !== "function") continue;
-          // property_id pode ter mudado (focar_imovel) — mantém o contexto local coerente
-          if (toolCall.function.name === "focar_imovel") {
-            const { data: refreshed } = await db
-              .from("conversations")
-              .select("property_id")
-              .eq("id", conversationId)
-              .single();
-            toolCtx.propertyId = refreshed?.property_id ?? toolCtx.propertyId;
+        if (msg.tool_calls && msg.tool_calls.length > 0) {
+          toolWasCalled = true;
+          if (msg.tool_calls.some((t) => t.type === "function" && t.function.name === "buscar_imovel")) buscouImovel = true;
+          messages.push(msg);
+          for (const toolCall of msg.tool_calls) {
+            const result = await runTool(toolCall, toolCtx);
+            await registrarFerramenta(db, conversationId, toolCall, result);
+            messages.push({
+              role: "tool",
+              tool_call_id: toolCall.id,
+              content: JSON.stringify(result),
+            });
+            if (toolCall.type !== "function") continue;
+            // property_id pode ter mudado (focar_imovel) — mantém o contexto local coerente
+            if (toolCall.function.name === "focar_imovel") {
+              const { data: refreshed } = await db
+                .from("conversations")
+                .select("property_id")
+                .eq("id", conversationId)
+                .single();
+              toolCtx.propertyId = refreshed?.property_id ?? toolCtx.propertyId;
+            }
+            if (toolCall.function.name === "enviar_material") {
+              toolCtx.materialSentAt = toolCtx.materialSentAt ?? new Date().toISOString();
+            }
+            if (toolCall.function.name === "oferecer_visita") {
+              toolCtx.visitOffersCount += 1;
+            }
+            if (toolCall.function.name === "finalizar_atendimento") {
+              atendimentoFinalizado = true;
+            }
           }
-          if (toolCall.function.name === "enviar_material") {
-            toolCtx.materialSentAt = toolCtx.materialSentAt ?? new Date().toISOString();
-          }
-          if (toolCall.function.name === "oferecer_visita") {
-            toolCtx.visitOffersCount += 1;
-          }
-          if (toolCall.function.name === "finalizar_atendimento") {
-            atendimentoFinalizado = true;
-          }
+          continue;
         }
-        continue;
-      }
 
-      finalText = msg.content ?? "";
-      break;
+        return msg.content ?? "";
+      }
+      return "";
+    };
+
+    finalText = await executarAteTexto();
+
+    // trava (caso Lorena, 06/10/26): IA disse "não encontrei" sobre um imóvel que existe, sem
+    // ter consultado a base. Negativa sobre imóvel só vale depois de buscar_imovel no turno.
+    if (finalText && NEGATIVA_IMOVEL_RE.test(finalText) && !buscouImovel && !atendimentoFinalizado) {
+      await logEvent("warn", "agent", "negativa sem buscar_imovel — forçando a busca", { conversationId, finalText });
+      messages.push({ role: "assistant", content: finalText });
+      messages.push({
+        role: "user",
+        content:
+          "[sistema] Você ia dizer que não encontrou / não tem o imóvel SEM chamar buscar_imovel. Chame buscar_imovel agora com o termo que a pessoa usou (rua, endereço, bairro ou característica, do jeito que ela escreveu) e só responda depois de ver o resultado.",
+      });
+      finalText = await executarAteTexto();
     }
 
     if (atendimentoFinalizado) finalText = "";
@@ -265,6 +286,35 @@ export async function runAgentTurn(conversationId: string, opts: { instrucaoExtr
   } finally {
     await releaseLock(db, conversationId);
   }
+}
+
+/** "não encontrei", "não temos", "não está disponível"... — negativa sobre imóvel. */
+const NEGATIVA_IMOVEL_RE =
+  /n[aã]o (encontrei|achei|localizei|consta)|n[aã]o (temos|tenho) (esse|este|nenhum|im[oó]ve|casa|apartamento|sobrado|terreno|op[cç])|n[aã]o est[aá] (mais )?dispon[ií]vel|n[aã]o (h[aá]|existe) (nenhum|im[oó]ve)|indispon[ií]vel/i;
+
+/** Cada ferramenta usada vira nota interna na conversa — dá pra investigar depois o que a IA fez. */
+async function registrarFerramenta(
+  db: ReturnType<typeof createServiceClient>,
+  conversationId: string,
+  toolCall: ChatCompletionMessageToolCall,
+  result: unknown
+) {
+  if (toolCall.type !== "function") return;
+  const resumo = JSON.stringify(result).slice(0, 400);
+  await db
+    .from("messages")
+    .insert({
+      conversation_id: conversationId,
+      direction: "out",
+      is_internal: true,
+      tool_name: toolCall.function.name,
+      tool_calls_json: { args: toolCall.function.arguments, resultado: resumo },
+      body: `[ferramenta] ${toolCall.function.name}(${toolCall.function.arguments.slice(0, 200)}) → ${resumo.slice(0, 200)}`,
+    })
+    .then(
+      () => undefined,
+      () => undefined
+    );
 }
 
 async function runTool(toolCall: ChatCompletionMessageToolCall, ctx: ToolContext) {
