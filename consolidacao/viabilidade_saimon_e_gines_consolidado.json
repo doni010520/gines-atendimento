@@ -1,0 +1,212 @@
+{
+  "mentorado": "Saimon e Gines",
+  "malha": [
+    "FULL"
+  ],
+  "cidade": null,
+  "impostoPct": 4,
+  "exportadoEm": "2026-10-06T12:00:00.000Z",
+  "resumo": {
+    "total": 5,
+    "aprovados": 1,
+    "alertas": 4,
+    "reprovados": 0
+  },
+  "produtos": [
+    {
+      "termo": "disco de arado",
+      "fornecedor": "THOR",
+      "tipo": "ORGÂNICO",
+      "status": "⚠️",
+      "custo": 19,
+      "comissaoPct": 14,
+      "pvRanqueamento": 55,
+      "pvMenor": 56,
+      "pvMaior": 88,
+      "freteRanqueamento": 7,
+      "freteMenor": 7,
+      "freteMaior": 7,
+      "avaliacao": 4.8,
+      "visitas": 757,
+      "vendasDia": 0.8,
+      "margemRanqueamentoPct": 34.7273,
+      "margemMenorPct": 35.5714,
+      "margemMaiorPct": 52.4545,
+      "lucroRanqueamento": 19.1,
+      "lucroMenor": 19.92,
+      "lucroMaior": 46.16,
+      "links": [
+        {
+          "url": "https://www.mercadolivre.com.br/disco-tacho-de-arado-porcoes-em-geral-promocao-grande/p/MLB2091650497#polycard_client=search-desktop&be_origin=backend&overlay_label=not_apply&search_layout=grid&position=8&type=product&tracking_id=51f6a3f6-2236-4fbf-b266-f8761ca421ff&wid=MLB6907592690&sid=searchhttps://www.mercadolivre.com.br/disco-tacho-de-arado-porcoes-em-geral-promocao-grande/p/MLB2091650497#polycard_client=search-desktop&be_origin=backend&overlay_label=not_apply&search_layout=grid&position=8&type=product&tracking_id=51f6a3f6-2236-4fbf-b266-f8761ca421ff&wid=MLB6907592690&sid=search",
+          "validacao": "NOK"
+        },
+        {
+          "url": "https://www.mercadolivre.com.br/chapa-grill-disco-30cm-alcas-antiaderente-fogao-bifeteria/up/MLBU4333942052?pdp_filters=shipping%3Afulfillment#polycard_client=search-desktop&be_origin=backend&overlay_label=not_apply&search_layout=grid&position=43&type=product&tracking_id=c11b9a77-6c97-4cb4-9e90-a63f8784f98c&wid=MLB4897583839&sid=search",
+          "validacao": "OK"
+        },
+        {
+          "url": "https://www.mercadolivre.com.br/chapa-redonda-para-churrasco-e-fogao-com-alcas-preto/up/MLBU4320930687?pdp_filters=SHIPPING_ORIGIN%3A10215068#polycard_client=search-desktop&be_origin=backend&overlay_label=not_apply&search_layout=grid&position=12&type=product&tracking_id=4ddf8e26-25fd-48da-bd81-5ac74d746647&wid=MLB4901968771&sid=search",
+          "validacao": "OK"
+        }
+      ],
+      "variacaoOk": "",
+      "marcaOk": ""
+    },
+    {
+      "termo": "porta cartões",
+      "fornecedor": "b-max",
+      "tipo": "ORGÂNICO",
+      "status": "⚠️",
+      "custo": 7.2,
+      "comissaoPct": 14,
+      "pvRanqueamento": 21.3,
+      "pvMenor": 21.99,
+      "pvMaior": 87,
+      "freteRanqueamento": 7,
+      "freteMenor": 7,
+      "freteMaior": 18,
+      "avaliacao": 4.8,
+      "visitas": 825,
+      "vendasDia": 1.7,
+      "margemRanqueamentoPct": 15.3333,
+      "margemMenorPct": 17.4252,
+      "margemMaiorPct": 53.0345,
+      "lucroRanqueamento": 3.27,
+      "lucroMenor": 3.83,
+      "lucroMaior": 46.14,
+      "links": [
+        {
+          "url": "https://www.mercadolivre.com.br/carteira-masculina-rfid-porta-cartao-protecao-aproximacao/up/MLBU3848804830#polycard_client=search-desktop&be_origin=backend&overlay_label=not_apply&search_layout=grid&position=55&type=product&tracking_id=0a8b0f3a-305d-4b9b-a022-609b62d52434&wid=MLB6456752610&sid=search",
+          "validacao": "OK"
+        },
+        {
+          "url": "https://www.mercadolivre.com.br/carteira-portacartao-slim-rfdi-antifraude-cor-preto-liso/up/MLBU4680035594?pdp_filters=shipping%3Afulfillment#polycard_client=search-desktop&be_origin=backend&overlay_label=not_apply&search_layout=grid&position=6&type=product&tracking_id=8f01873c-4537-40de-9284-be2e0347e28c&wid=MLB5033570381&sid=search",
+          "validacao": "OK"
+        },
+        {
+          "url": "https://www.mercadolivre.com.br/carteira-masculina-slim-porta-cartoes-cnh-antifurto-pequena/up/MLBU4385793595?pdp_filters=shipping%3Afulfillment#polycard_client=search-desktop&be_origin=backend&overlay_label=not_apply&search_layout=grid&position=44&type=product&tracking_id=66dbf52a-aafc-4886-87dd-d97e0a779163&wid=MLB7230288174&sid=search",
+          "validacao": "OK"
+        }
+      ],
+      "variacaoOk": "",
+      "marcaOk": ""
+    },
+    {
+      "termo": "Grampeador Alicate",
+      "fornecedor": "Bmax",
+      "tipo": "ORGÂNICO",
+      "status": "⚠️",
+      "custo": 10.1,
+      "comissaoPct": 11.5,
+      "pvRanqueamento": 29,
+      "pvMenor": 30.51,
+      "pvMaior": 37.99,
+      "freteRanqueamento": 5.75,
+      "freteMenor": 5.75,
+      "freteMaior": 5.75,
+      "avaliacao": 4.8,
+      "visitas": 298,
+      "vendasDia": 1,
+      "margemRanqueamentoPct": 29.8448,
+      "margemMenorPct": 32.5498,
+      "margemMaiorPct": 42.7785,
+      "lucroRanqueamento": 8.65,
+      "lucroMenor": 9.93,
+      "lucroMaior": 16.25,
+      "links": [
+        {
+          "url": "https://www.mercadolivre.com.br/grampeador-alicate-para-delivery-metal-com-1000-grampos-kit/up/MLBU4231986374?pdp_filters=shipping%3Afulfillment#polycard_client=search-desktop&be_origin=backend&overlay_label=not_apply&search_layout=grid&position=7&type=product&tracking_id=5bd80c8e-b5b4-4508-bf71-3191af227a8d&wid=MLB4850086611&sid=search",
+          "validacao": "OK"
+        },
+        {
+          "url": "https://www.mercadolivre.com.br/kit-grampeador-alicate-profissional-aco--5000-grampos-266/up/MLBU3476644024#polycard_client=search-desktop&be_origin=backend&overlay_label=not_apply&search_layout=grid&position=29&type=product&tracking_id=1e504f78-74bb-46dc-95ee-57a9028982c4&wid=MLB5773222048&sid=search",
+          "validacao": "OK"
+        },
+        {
+          "url": "https://www.mercadolivre.com.br/kit-grampeador-alicate-pro-jocar--5000-grampos--extrator/up/MLBU772048438#polycard_client=search-desktop&be_origin=backend&overlay_label=not_apply&search_layout=grid&position=5&type=product&tracking_id=1e504f78-74bb-46dc-95ee-57a9028982c4&wid=MLB3758658341&sid=search",
+          "validacao": "OK"
+        }
+      ],
+      "variacaoOk": "",
+      "marcaOk": ""
+    },
+    {
+      "termo": "Carregador Canguru",
+      "fornecedor": "Utimix",
+      "tipo": "ORGÂNICO",
+      "status": "⚠️",
+      "custo": 14.3,
+      "comissaoPct": 11.5,
+      "pvRanqueamento": 33,
+      "pvMenor": 39.9,
+      "pvMaior": 45.9,
+      "freteRanqueamento": 5.75,
+      "freteMenor": 5.75,
+      "freteMaior": 5.75,
+      "avaliacao": 4.4,
+      "visitas": 461,
+      "vendasDia": 1.4,
+      "margemRanqueamentoPct": 23.7424,
+      "margemMenorPct": 34.2494,
+      "margemMaiorPct": 40.8181,
+      "lucroRanqueamento": 7.83,
+      "lucroMenor": 13.67,
+      "lucroMaior": 18.74,
+      "links": [
+        {
+          "url": "https://produto.mercadolivre.com.br/MLB-5101305688-canguru-seguro-ergonmico-sling-carregar-o-beb-criancas-_JM?searchVariation=189012526833#polycard_client=search-desktop&searchVariation=189012526833&be_origin=backend&overlay_label=not_apply&search_layout=grid&position=22&type=item&tracking_id=28cbdb3a-81c2-4620-8bb1-260afa440045&sid=search",
+          "validacao": "OK"
+        },
+        {
+          "url": "https://produto.mercadolivre.com.br/MLB-4258523753-canguru-sling-wrap-malha-100-algodo-pano-pcarregar-beb-_JM?searchVariation=191955054471#polycard_client=search-desktop&searchVariation=191955054471&be_origin=backend&overlay_label=not_apply&search_layout=grid&position=30&type=item&tracking_id=28cbdb3a-81c2-4620-8bb1-260afa440045&sid=search",
+          "validacao": "OK"
+        },
+        {
+          "url": "https://produto.mercadolivre.com.br/MLB-4040512213-canguru-porta-beb-carregador-sling-cadeirinha-ergonmico-_JM?searchVariation=187629363699#polycard_client=search-desktop&searchVariation=187629363699&be_origin=backend&overlay_label=not_apply&search_layout=grid&position=12&type=item&tracking_id=28cbdb3a-81c2-4620-8bb1-260afa440045&sid=search",
+          "validacao": "OK"
+        }
+      ],
+      "variacaoOk": "",
+      "marcaOk": ""
+    },
+    {
+      "termo": "jogo americano",
+      "fornecedor": "bmax",
+      "tipo": "ORGÂNICO",
+      "status": "✅",
+      "custo": 14.85,
+      "comissaoPct": 11.5,
+      "pvRanqueamento": 28.2,
+      "pvMenor": 32.9,
+      "pvMaior": 42.68,
+      "freteRanqueamento": 5.75,
+      "freteMenor": 5.75,
+      "freteMaior": 5.75,
+      "avaliacao": 4.9,
+      "visitas": 166,
+      "vendasDia": 166,
+      "margemRanqueamentoPct": 11.4504,
+      "margemMenorPct": 21.886,
+      "margemMaiorPct": 36.2338,
+      "lucroRanqueamento": 3.23,
+      "lucroMenor": 7.2,
+      "lucroMaior": 15.46,
+      "links": [
+        {
+          "url": "https://www.mercadolivre.com.br/kit4-jogo-americano-redondo-sousplat-mesa-posta-cozinha/up/MLBU3134564189#polycard_client=search-desktop&float_highlight=last_units&be_origin=backend&overlay_label=not_apply&search_layout=grid&position=18&type=product&tracking_id=63f7b5bd-95d6-4313-a68b-c2a30fda1d38&wid=MLB7027165504&sid=search",
+          "validacao": "OK"
+        },
+        {
+          "url": "https://www.mercadolivre.com.br/kit-4-jogo-americano-redondo-39cm-sousplat-supla-mesa-posta/up/MLBU3784314761#polycard_client=search-desktop&be_origin=backend&overlay_label=not_apply&search_layout=grid&position=11&type=product&tracking_id=63f7b5bd-95d6-4313-a68b-c2a30fda1d38&wid=MLB6250228802&sid=search",
+          "validacao": "OK"
+        },
+        {
+          "url": "https://produto.mercadolivre.com.br/MLB-4635998418-jogo-americano-4-pecas-redondo-sousplat-supla-mesa-posta-_JM?searchVariation=199368785089#polycard_client=search-desktop&searchVariation=199368785089&be_origin=backend&overlay_label=not_apply&search_layout=grid&position=22&type=item&tracking_id=63f7b5bd-95d6-4313-a68b-c2a30fda1d38&sid=search",
+          "validacao": "OK"
+        }
+      ],
+      "variacaoOk": "",
+      "marcaOk": ""
+    }
+  ]
+}
