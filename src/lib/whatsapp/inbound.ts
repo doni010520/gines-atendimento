@@ -3,6 +3,7 @@ import { parseUazapiMessage, type ParsedInboundMessage } from "./parse-webhook";
 import { scheduleDebounced } from "./debounce";
 import { runAgentTurn } from "@/lib/ai/agent";
 import { casarImovelPorAnuncio } from "./match-property";
+import { nomeDoFormulario } from "./formulario";
 import { logEvent } from "@/lib/log";
 import { sendText, downloadAndTranscribeAudio, atendidoManualmenteRecente } from "./uazapi";
 import { pararCadencia } from "@/lib/followup/engine";
@@ -58,13 +59,6 @@ async function resetConversationByPhone(db: ReturnType<typeof createServiceClien
       error: err instanceof Error ? err.message : String(err),
     })
   );
-}
-
-/** Mensagem automática do formulário da Meta: "...\nFull name: Teresa Cristina". */
-export function nomeDoFormulario(texto: string): string | null {
-  const m = texto.match(/^\s*(?:full name|nome completo)\s*:\s*(.+?)\s*$/im);
-  const nome = m?.[1]?.replace(/\s+/g, " ").trim();
-  return nome && nome.length >= 2 && nome.length <= 80 ? nome : null;
 }
 
 /** Imóvel escolhido em /agente pra leads de anúncio que não dizem qual imóvel é. */

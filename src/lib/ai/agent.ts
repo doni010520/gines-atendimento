@@ -9,6 +9,7 @@ import { sendText } from "@/lib/whatsapp/uazapi";
 import { logEvent } from "@/lib/log";
 import { MODEL, openaiClient } from "./openai";
 import { iniciarCadencia } from "@/lib/followup/engine";
+import { corpoParaIA } from "@/lib/whatsapp/formulario";
 
 const MAX_ITERATIONS = 6;
 const LOCK_MS = 2 * 60 * 1000;
@@ -154,7 +155,7 @@ export async function runAgentTurn(conversationId: string, opts: { instrucaoExtr
         .filter((m) => !m.is_internal)
         .map((m): ChatCompletionMessageParam => ({
           role: m.direction === "in" ? "user" : "assistant",
-          content: m.body ?? "",
+          content: m.direction === "in" ? corpoParaIA(m.body) : (m.body ?? ""),
         }))),
       ...(opts.instrucaoExtra ? [{ role: "system" as const, content: opts.instrucaoExtra }] : []),
     ];

@@ -4,6 +4,7 @@ import { logEvent } from "@/lib/log";
 import { copyFallback } from "./messages";
 import { greetingFor } from "./business-hours";
 import type { Toque } from "./touches";
+import { corpoParaIA } from "@/lib/whatsapp/formulario";
 
 type Db = ReturnType<typeof createServiceClient>;
 
@@ -50,7 +51,7 @@ export async function gerarTextoToque(params: {
     const conversa = (historico ?? [])
       .reverse()
       .filter((m) => !m.is_internal && m.body)
-      .map((m) => `${m.direction === "in" ? "Cliente" : "Você"}: ${m.body}`)
+      .map((m) => `${m.direction === "in" ? "Cliente" : "Você"}: ${m.direction === "in" ? corpoParaIA(m.body) : m.body}`)
       .join("\n");
 
     const contextoImovel = imovel
@@ -78,6 +79,7 @@ export async function gerarTextoToque(params: {
       "- NÃO repita frases, aberturas ou perguntas que você já mandou no histórico.",
       "- Não invente características, preços, datas ou fatos que não estejam no contexto.",
       "- Use só o primeiro nome do cliente, se souber. No máximo um emoji, e só se couber.",
+      "- Se há imóvel em foco, a mensagem é SOBRE ESSE IMÓVEL (cite o tipo e o bairro). Nunca ofereça falar da \"empresa\" nem pergunte genericamente se a pessoa quer saber mais.",
       `- Se for cumprimentar pelo horário, agora é "${greetingFor(now)}".`,
       "- Responda APENAS com o texto da mensagem, sem aspas e sem explicações.",
       "",
