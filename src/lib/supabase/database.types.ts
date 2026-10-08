@@ -270,6 +270,7 @@ export type Database = {
           handoff_message: string | null
           optout_message: string | null
           extra_instructions: string | null
+          imovel_formulario_id: string | null
           updated_at: string
         }
         Insert: {
@@ -282,6 +283,7 @@ export type Database = {
           handoff_message?: string | null
           optout_message?: string | null
           extra_instructions?: string | null
+          imovel_formulario_id?: string | null
           updated_at?: string
         }
         Update: {
@@ -294,6 +296,7 @@ export type Database = {
           handoff_message?: string | null
           optout_message?: string | null
           extra_instructions?: string | null
+          imovel_formulario_id?: string | null
           updated_at?: string
         }
         Relationships: []

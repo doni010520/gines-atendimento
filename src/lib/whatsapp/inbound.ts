@@ -60,6 +60,22 @@ async function resetConversationByPhone(db: ReturnType<typeof createServiceClien
   );
 }
 
+/** Mensagem automática do formulário da Meta: "...\nFull name: Teresa Cristina". */
+export function nomeDoFormulario(texto: string): string | null {
+  const m = texto.match(/^\s*(?:full name|nome completo)\s*:\s*(.+?)\s*$/im);
+  const nome = m?.[1]?.replace(/\s+/g, " ").trim();
+  return nome && nome.length >= 2 && nome.length <= 80 ? nome : null;
+}
+
+/** Imóvel escolhido em /agente pra leads de anúncio que não dizem qual imóvel é. */
+async function imovelDoFormulario(db: ReturnType<typeof createServiceClient>): Promise<string | null> {
+  const { data } = await db.from("agent_settings").select("imovel_formulario_id").eq("id", true).maybeSingle();
+  const id = data?.imovel_formulario_id;
+  if (!id) return null;
+  const { data: p } = await db.from("properties").select("id,status").eq("id", id).maybeSingle();
+  return p && p.status === "ativo" ? p.id : null;
+}
+
 async function getOrCreateContact(db: ReturnType<typeof createServiceClient>, phone: string, name?: string) {
   const { data: existing } = await db.from("contacts").select("*").eq("phone", phone).maybeSingle();
   if (existing) return existing;
@@ -193,6 +209,12 @@ export async function handleInboundMessage(rawMessage: Record<string, unknown>) 
   // lead respondeu: a cadência de follow-up para; recomeça quando o robô falar de novo
   await pararCadencia(db, conversation.id);
 
+  // formulário do anúncio já traz o nome ("Full name: Teresa Cristina") — não pergunta de novo
+  const nomeFormulario = body ? nomeDoFormulario(body) : null;
+  if (nomeFormulario && !contact.name_confirmed) {
+    await db.from("contacts").update({ name: nomeFormulario, name_confirmed: true }).eq("id", contact.id);
+  }
+
   // 1ª mensagem da conversa: tenta casar com o anúncio clicado
   if (!conversation.property_id && parsed.adReferral) {
     await db.from("ad_referrals").insert({ conversation_id: conversation.id, raw: parsed.raw as never });
@@ -205,6 +227,16 @@ export async function handleInboundMessage(rawMessage: Record<string, unknown>) 
       });
       return null;
     });
+
+    const imovelFinal = propertyId ?? (await imovelDoFormulario(db));
+    if (!propertyId && imovelFinal) {
+      await db.from("conversations").update({ property_id: imovelFinal }).eq("id", conversation.id);
+      conversation.property_id = imovelFinal;
+      await logEvent("info", "ad-match", "anúncio sem identificação — usado o imóvel padrão dos formulários", {
+        conversationId: conversation.id,
+        propertyId: imovelFinal,
+      });
+    }
 
     if (propertyId) {
       await db.from("conversations").update({ property_id: propertyId }).eq("id", conversation.id);

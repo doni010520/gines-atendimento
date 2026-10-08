@@ -55,6 +55,11 @@ export default async function AgentePage() {
   const supabase = await createSupabaseServerClient();
   const { data, error } = await supabase.from("agent_settings").select("*").eq("id", true).maybeSingle();
   const a = mesclarAgente(data);
+  const { data: imoveis } = await supabase
+    .from("properties")
+    .select("id,title,neighborhood")
+    .eq("status", "ativo")
+    .order("title");
   const semTabela = Boolean(error);
 
   return (
@@ -130,6 +135,34 @@ export default async function AgentePage() {
               valor={a.optoutMessage}
               linhas={2}
             />
+          </Card>
+        </section>
+
+        <section className="space-y-2">
+          <h2 className={SECAO}>Leads de formulário</h2>
+          <Card className="space-y-3 p-4">
+            <div className="space-y-1.5">
+              <label htmlFor="imovelFormulario" className={LABEL}>
+                Imóvel dos leads que chegam pelo formulário do anúncio{" "}
+                <span className="font-normal text-ink-subtle">
+                  (o WhatsApp não informa de qual anúncio veio; o nome do formulário a IA já usa sozinha)
+                </span>
+              </label>
+              <select
+                id="imovelFormulario"
+                name="imovelFormulario"
+                defaultValue={data?.imovel_formulario_id ?? ""}
+                className={`min-h-11 ${CONTROL}`}
+              >
+                <option value="">Nenhum — a IA pergunta qual imóvel interessa</option>
+                {(imoveis ?? []).map((i) => (
+                  <option key={i.id} value={i.id}>
+                    {i.title}
+                    {i.neighborhood ? ` (${i.neighborhood})` : ""}
+                  </option>
+                ))}
+              </select>
+            </div>
           </Card>
         </section>
 

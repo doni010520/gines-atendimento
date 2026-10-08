@@ -38,6 +38,7 @@ export async function saveAgent(formData: FormData) {
     if (valor.length > LIMITES[chave]) throw new Error(`Campo muito longo (máx. ${LIMITES[chave]} caracteres)`);
     linha[AGENT_COLUNAS[chave]] = !valor || valor === AGENT_DEFAULTS[chave] ? null : valor;
   }
+  linha.imovel_formulario_id = String(formData.get("imovelFormulario") ?? "").trim() || null;
 
   const { error } = await supabase
     .from("agent_settings")
@@ -46,7 +47,7 @@ export async function saveAgent(formData: FormData) {
   revalidatePath("/agente");
 }
 
-/** Volta tudo pro comportamento original. */
+/** Volta tudo pro comportamento original (o imóvel dos formulários fica como está). */
 export async function resetAgent() {
   const supabase = await autenticado();
   const vazio = Object.fromEntries(Object.values(AGENT_COLUNAS).map((c) => [c, null]));

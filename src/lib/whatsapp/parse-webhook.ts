@@ -76,6 +76,11 @@ function acharContextoAnuncio(
   if (anuncio && typeof anuncio === "object") {
     return { anuncio: anuncio as Record<string, unknown>, contexto: obj };
   }
+  // anúncio com formulário da Meta (07/10/26): vem só conversionSource/entryPointConversionSource,
+  // sem externalAdReply — é anúncio, mas sem título nem id pra casar com o imóvel
+  if (obj["entryPointConversionSource"] === "ctwa_ad" || obj["conversionSource"] === "FB_Ads") {
+    return { anuncio: {}, contexto: obj };
+  }
 
   for (const key of Object.keys(obj)) {
     const found = acharContextoAnuncio(obj[key], depth + 1);
