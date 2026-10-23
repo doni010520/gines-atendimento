@@ -2,6 +2,7 @@ import { createServiceClient } from "@/lib/supabase/service";
 import { parseUazapiMessage, type ParsedInboundMessage } from "./parse-webhook";
 import { scheduleDebounced } from "./debounce";
 import { runAgentTurn } from "@/lib/ai/agent";
+import { nomeDePerfilUsavel, primeiraAbordagem } from "@/lib/ai/abordagem";
 import { casarImovelPorAnuncio } from "./match-property";
 import { nomeDoFormulario } from "./formulario";
 import { logEvent } from "@/lib/log";
@@ -234,6 +235,7 @@ export async function handleInboundMessage(rawMessage: Record<string, unknown>) 
 
     if (propertyId) {
       await db.from("conversations").update({ property_id: propertyId }).eq("id", conversation.id);
+      conversation.property_id = propertyId;
       await logEvent("info", "ad-match", "imóvel identificado pelo anúncio", {
         conversationId: conversation.id,
         propertyId,
@@ -261,7 +263,35 @@ export async function handleInboundMessage(rawMessage: Record<string, unknown>) 
     return;
   }
 
+  // 1ª mensagem de quem clicou num anúncio já identificado: material na hora, sem travar no
+  // nome (pedido do Gines, 23/10 — o lead do Instagram recebia só "posso saber seu nome?")
+  if (conversation.property_id && (await semRespostaAinda(db, conversation.id))) {
+    const { data: c } = await db.from("contacts").select("name,name_confirmed").eq("id", contact.id).single();
+    const nome = c?.name_confirmed ? c.name : nomeDePerfilUsavel(c?.name ?? parsed.senderName);
+    const propertyId = conversation.property_id;
+    scheduleDebounced(conversation.id, () =>
+      primeiraAbordagem(db, conversation.id, parsed.phone, {
+        nome,
+        nomeConfirmado: Boolean(c?.name_confirmed),
+        propertyId,
+        leadJaFalou: true,
+      })
+    );
+    return;
+  }
+
   scheduleDebounced(conversation.id, () => runAgentTurn(conversation.id));
+}
+
+/** A conversa ainda não teve nenhuma mensagem nossa (nem do robô, nem de humano). */
+async function semRespostaAinda(db: ReturnType<typeof createServiceClient>, conversationId: string): Promise<boolean> {
+  const { count } = await db
+    .from("messages")
+    .select("id", { count: "exact", head: true })
+    .eq("conversation_id", conversationId)
+    .eq("direction", "out")
+    .eq("is_internal", false);
+  return !count;
 }
 
 /**
