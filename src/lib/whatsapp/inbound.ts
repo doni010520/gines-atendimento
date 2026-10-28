@@ -75,9 +75,11 @@ async function getOrCreateContact(db: ReturnType<typeof createServiceClient>, ph
   const { data: existing } = await db.from("contacts").select("*").eq("phone", phone).maybeSingle();
   if (existing) return existing;
 
+  // nome do perfil que parece nome de gente vale como nome (Gines, 23/10): a IA cumprimenta
+  // por ele e não pergunta de novo — perguntar depois de já chamar pelo nome soava robótico (28/10)
   const { data: created, error } = await db
     .from("contacts")
-    .insert({ phone, name: name ?? null })
+    .insert({ phone, name: name ?? null, name_confirmed: Boolean(nomeDePerfilUsavel(name)) })
     .select()
     .single();
   if (error) {
@@ -267,12 +269,16 @@ export async function handleInboundMessage(rawMessage: Record<string, unknown>) 
   // nome (pedido do Gines, 23/10 — o lead do Instagram recebia só "posso saber seu nome?")
   if (conversation.property_id && (await semRespostaAinda(db, conversation.id))) {
     const { data: c } = await db.from("contacts").select("name,name_confirmed").eq("id", contact.id).single();
-    const nome = c?.name_confirmed ? c.name : nomeDePerfilUsavel(c?.name ?? parsed.senderName);
+    const perfil = nomeDePerfilUsavel(c?.name ?? parsed.senderName);
+    const nome = c?.name_confirmed ? c.name : perfil;
+    if (!c?.name_confirmed && perfil) {
+      await db.from("contacts").update({ name: perfil, name_confirmed: true }).eq("id", contact.id);
+    }
     const propertyId = conversation.property_id;
     scheduleDebounced(conversation.id, () =>
       primeiraAbordagem(db, conversation.id, parsed.phone, {
         nome,
-        nomeConfirmado: Boolean(c?.name_confirmed),
+        nomeConfirmado: Boolean(c?.name_confirmed || perfil),
         propertyId,
         leadJaFalou: true,
       })
